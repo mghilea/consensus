@@ -8,18 +8,12 @@
   ],
   "replication_protocol_settings": [
     {
-	    "first_round_batching": true,
-	    "second_round_batching": false,
-	    "single_shard_aware": false,
-            "server_delay_reply": true,
+	    "server_delay_reply": true,
       "server_execute_commands": true,
       "server_thrifty": true
     },
     {
-	    "first_round_batching": true,
-	    "second_round_batching": false,
-	    "single_shard_aware": false,
-            "server_delay_reply": true,
+	    "server_delay_reply": true,
       "server_execute_commands": true,
       "server_thrifty": true
     }
@@ -60,47 +54,49 @@
 	  "client-2-0"
   ],
   "server_regions": {
-    "us-east-1": [
+    "california": [
       "us-east-1-0",
-      "us-east-1-1",
-      "us-east-1-2",
-      "client-0-0",
-      "client-1-0",
-      "client-2-0"
-    ],
-    "eu-west-1": [
       "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-    "us-west-1": [
       "us-west-1-0",
+      "client-0-0"
+    ],
+    "virginia": [
+      "us-east-1-1",
+      "eu-west-1-1",
       "us-west-1-1",
-      "us-west-1-2"
+      "client-1-0"
+    ],
+    "ireland": [
+      "us-east-1-2",
+      "eu-west-1-2",
+      "us-west-1-2",
+      "client-2-0"
     ]
   },
   "region_rtt_latencies": {
-      "us-west-1": {
-        "us-west-1": 0,
-        "eu-west-1": 151,
-        "us-east-1": 72
+      "california": {
+        "california": 0,
+        "virginia": 72,
+        "ireland": 151
       },
-      "eu-west-1": {
-        "us-west-1": 151,
-        "eu-west-1": 0,
-        "us-east-1": 88
+      "virginia": {
+        "california": 72,
+        "virginia": 0,
+        "ireland": 88
       },
-      "us-east-1": {
-        "us-west-1": 72,
-        "eu-west-1": 88,
-        "us-east-1": 0
+      "ireland": {
+        "california": 151,
+        "virginia": 88,
+        "ireland": 0
       }
   },
   "client_total": [
-	  [3, 6, 12, 24, 48, 96, 192, 384, 768, 1536]
+	  [3, 6, 12, 24],
+	  [3, 6, 12, 24]
   ],
   "client_processes_per_client_node": [
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+	  [1, 2, 4, 8],
+	  [1, 2, 4, 8]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -159,25 +155,25 @@
   "plot_tput_lat_series_title": ["Multi-Paxos", "EPaxos"],
   "plot_tput_lat_x_label": "Throughput (ops/sec)",
   "plot_tput_lat_y_label": "Latency (ms)",
-  "base_local_exp_directory": "/users/ralucaghilea/research/consensus/experiments/sharding/results/mp-ep-3",
+  "base_local_exp_directory": "/users/rghilea/consensus/experiments/sharding/results/mp-ep-3",
   "base_mounted_fs_path": "/mnt/extra",
-  "base_remote_bin_directory_nfs": "/users/ralucaghilea/research/consensus",
+  "base_remote_bin_directory_nfs": "/users/rghilea/consensus",
   "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
   "client_debug_output": false,
-  "client_experiment_length": 60,
+  "client_experiment_length": 30,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 2,
-  "client_num_keys": 1000000,
+  "client_num_keys": 10000,
   "client_ramp_down": 10,
   "client_ramp_up": 10,
   "client_random_coordinator": false,
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "sharding",
+  "experiment_name": "rghilea-275309",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,
@@ -189,7 +185,7 @@
   "max_retries": 0,
   "num_experiment_runs": 1,
   "out_directory_name": "out",
-  "project_name": "praxis-PG0",
+  "project_name": "cops-pg0",
   "stats_file_name": "stats.json",
   "server_bin_name": "server",
   "server_cpuprofile": false,
@@ -200,10 +196,10 @@
   "server_port": 7087,
   "server_rpc_port": 8087,
   "src_commit_hash": "scripts",
-  "src_directory": "/users/ralucaghilea/research/consensus",
+  "src_directory": "/users/rghilea/consensus",
   "codebase_name": "mdl",
   "remote_bin_directory_nfs_enabled": false,
-  "server_emulate_wan": false,
+  "server_emulate_wan": true,
   "run_locally": false,
   "default_remote_shell": "bash",
   "client_disable_gc": true,
