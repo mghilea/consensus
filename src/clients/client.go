@@ -155,8 +155,8 @@ func (c *AbstractClient) ConnectToCoordinator() {
 	c.leaderAddrs = llReply.LeaderList
 	c.numLeaders = len(c.leaderAddrs)
 	c.leaderAlive = make([]bool, c.numLeaders)
-	// c.replicaPing = make([]uint64, c.numLeaders)
-	// c.replicasByPingRank = make([]int32, c.numLeaders)
+	c.replicaPing = make([]uint64, c.numLeaders)
+	c.replicasByPingRank = make([]int32, c.numLeaders)
 	c.retries = make([]int, c.numLeaders)
 	// c.delayRPC = make([]map[uint8]bool, c.numLeaders)
 	// c.delayedRPC = make([]map[uint8]chan fastrpc.Serializable, c.numLeaders)

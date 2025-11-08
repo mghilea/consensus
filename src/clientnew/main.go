@@ -305,7 +305,7 @@ func main() {
 			log.Printf("Failed %s(%d).\n", opString, count)
 		}
 		count++
-		dlog.Printf("AppRequests attempted: %d\n", count)
+		// dlog.Printf("AppRequests attempted: %d\n", count)
 		//dlog.Printf("AppRequests attempted: %d at time %d\n", count, time.Now().UnixMilli())
 
 		currInt := int(currRuntime.Seconds())

@@ -109,11 +109,11 @@ func (c *ProposeClient) sendPropose() {
 			if c.forceLeader >= 0 {
 				replica = c.forceLeader
 			} else {
-				panic("shouldn't be here...PingRank isn't implemented")
+				// panic("shouldn't be here...PingRank isn't implemented")
 				replica = int(c.replicasByPingRank[0])
 			}
 		}
-		//dlog.Printf("@Sending request to %d\n", replica)
+		// dlog.Printf("@Sending request to %d\n", replica)
 		c.writers[replica].WriteByte(clientproto.GEN_PROPOSE)
 		c.propose.Marshal(c.writers[replica])
 		c.writers[replica].Flush()
