@@ -1,11 +1,11 @@
 from lib.gryff_codebase import GryffCodebase
 from lib.rdma_repl_codebase import RdmaReplCodebase
 from lib.morty_codebase import MortyCodebase
-from lib.mdl_codebase import MDLCodebase
+from lib.sharding_codebase import ShardingCodebase
 
 
 __BUILDERS__ = {
-    "mdl": MDLCodebase()
+    "sharding": ShardingCodebase()
 }
 
 

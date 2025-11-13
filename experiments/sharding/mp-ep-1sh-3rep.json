@@ -175,7 +175,7 @@
   "server_rpc_port": 8087,
   "src_commit_hash": "scripts",
   "src_directory": "/users/rghilea/consensus",
-  "codebase_name": "mdl",
+  "codebase_name": "sharding",
   "remote_bin_directory_nfs_enabled": false,
   "server_emulate_wan": true,
   "run_locally": false,

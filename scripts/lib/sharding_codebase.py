@@ -15,7 +15,7 @@ from utils.remote_util import is_using_tcsh
 from utils.remote_util import tcsh_redirect_output_to_files
 
 
-class MDLCodebase(ExperimentCodebase):
+class ShardingCodebase(ExperimentCodebase):
 
     def get_replication_protocol_arg_from_name(self, replication_protocol):
         return {
