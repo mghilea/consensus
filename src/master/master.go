@@ -227,7 +227,11 @@ func (master *Master) GetReplicaList(args *masterproto.GetReplicaListArgs, reply
 	defer master.lock.Unlock()
 
 	if master.nConnected == master.N {
-		reply.ReplicaList = master.nodeList
+		replicaList := make([]string, len(master.addrList))
+		for i := 0; i < len(master.addrList); i++ {
+			replicaList[i] = fmt.Sprintf("%s:%d", master.addrList[i], master.rpcPortList[i])
+		}
+		reply.ReplicaList = replicaList
 		reply.Ready = true
 	} else {
 		reply.Ready = false

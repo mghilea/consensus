@@ -219,6 +219,25 @@ func (coordinator *Coordinator) GetShardLeaderList(args *coordinatorproto.GetSha
 	return nil
 }
 
+// Coordinator --> Client
+func (coordinator *Coordinator) GetReplicaList(args *coordinatorproto.GetReplicaListArgs, reply *coordinatorproto.GetReplicaListReply) error {
+	log.Println("Client requested replica list")
+	coordinator.lock.Lock()
+	defer coordinator.lock.Unlock()
+
+	reply.ReplicaListPerShard = make([][]string, len(coordinator.masters))
+
+	for i, mcli := range coordinator.masters {
+		rlReply := new(masterproto.GetReplicaListReply)
+		args := &masterproto.GetReplicaListArgs{}
+		if err := mcli.Call("Master.GetReplicaList", args, rlReply); err != nil {
+			log.Fatalf("Error making the GetReplicaList RPC\n")
+		}
+		reply.ReplicaListPerShard[i] = rlReply.ReplicaList
+	}
+	return nil
+}
+
 // Master --> Coordinator
 func (coordinator *Coordinator) ThisShardConnected(args *coordinatorproto.ThisShardConnectedArgs, reply *coordinatorproto.ThisShardConnectedReply) error {
 	log.Println("Coordinator got notified of shard connection made!")

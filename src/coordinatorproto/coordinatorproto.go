@@ -25,6 +25,13 @@ type GetShardLeaderListReply struct {
 	LeaderList []string
 }
 
+type GetReplicaListArgs struct {
+}
+
+type GetReplicaListReply struct {
+	ReplicaListPerShard [][]string
+}
+
 type RegisterKeyspaceReply struct {
 }
 

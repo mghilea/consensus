@@ -68,11 +68,17 @@ type AbstractClient struct {
 	leader             int
 	pingReplyChan      chan fastrpc.Serializable
 	leaderAlive        []bool
-	replicaPing        []uint64
-	replicasByPingRank []int32
+	replicaPing        [][]uint64
+	replicasByPingRank [][]int32
 	retries            []int
 	delayRPC           []map[uint8]bool
 	delayedRPC         []map[uint8]chan fastrpc.Serializable
+	replicasPerShard   [][]string
+	replicaConns       [][]net.Conn
+	replicaReaders     [][]*bufio.Reader
+	replicaWriters     [][]*bufio.Writer
+	replicaRetries     [][]int
+	replicaAlive       [][]bool
 }
 
 func NewAbstractClient(id int32, coordinatorAddr string, coordinatorPort int, forceLeader int, statsFile string) *AbstractClient {
@@ -97,11 +103,17 @@ func NewAbstractClient(id int32, coordinatorAddr string, coordinatorPort int, fo
 		make(chan fastrpc.Serializable, // pingReplyChan
 			CHAN_BUFFER_SIZE),
 		make([]bool, 0),           // replicasAlive
-		make([]uint64, 0),         // replicaPing
-		make([]int32, 0),          // replicasByPingRank
+		make([][]uint64, 0),       // replicaPing
+		make([][]int32, 0),        // replicasByPingRank
 		make([]int, 0),            // retries
 		make([]map[uint8]bool, 0), // delayRPC
 		make([]map[uint8]chan fastrpc.Serializable, 0), // delayedRPC
+		make([][]string, 0),             // replicasPerShard
+		make([][]net.Conn, 0),           // replicaConns
+		make([][]*bufio.Reader, 0),      // replicaReaders
+		make([][]*bufio.Writer, 0),      // replicaWriters
+		make([][]int, 0),                // replicaRetries
+		make([][]bool, 0),               // replicasAlive
 	}
 	c.RegisterRPC(new(clientproto.PingReply), clientproto.GEN_PING_REPLY, c.pingReplyChan)
 
@@ -150,14 +162,35 @@ func (c *AbstractClient) ConnectToCoordinator() {
 	}
 	log.Printf("]\n")
 
+	// Get all replicas per shard
+	srReply := new(coordinatorproto.GetReplicaListReply)
+	err = coordinator.Call("Coordinator.GetReplicaList", new(coordinatorproto.GetReplicaListArgs), srReply)
+	if err != nil {
+		log.Fatalf("Error making the GetReplicaList RPC: %v\n", err)
+	}
+	log.Printf("Got replica list per shard from coordinator: [[")
+	for i := 0; i < len(srReply.ReplicaListPerShard); i++ {
+		for j := 0; j < len(srReply.ReplicaListPerShard[i]); j++ {
+			log.Printf("%s", srReply.ReplicaListPerShard[i][j])
+			if i != len(srReply.ReplicaListPerShard[i])-1 {
+				log.Printf(", ")
+			} else {
+				log.Printf("], [")
+			}
+		}
+		
+	}
+	log.Printf("]]\n")
+
 	// TODO: Update coordinator to return leader and replicas for each shard.
 	//       Then update data structures here to keep track of state for all of them.
 	c.leaderAddrs = llReply.LeaderList
 	c.numLeaders = len(c.leaderAddrs)
 	c.leaderAlive = make([]bool, c.numLeaders)
-	c.replicaPing = make([]uint64, c.numLeaders)
-	c.replicasByPingRank = make([]int32, c.numLeaders)
+	c.replicaPing = make([][]uint64, c.numLeaders)
+	c.replicasByPingRank = make([][]int32, c.numLeaders)
 	c.retries = make([]int, c.numLeaders)
+	c.replicasPerShard = srReply.ReplicaListPerShard
 	// c.delayRPC = make([]map[uint8]bool, c.numLeaders)
 	// c.delayedRPC = make([]map[uint8]chan fastrpc.Serializable, c.numLeaders)
 	// for i := 0; i < c.numLeaders; i++ {
@@ -177,6 +210,74 @@ func (c *AbstractClient) ConnectToShards() {
 		}
 	}
 	log.Printf("Successfully connected to all %d leaders.\n", c.numLeaders)
+}
+
+func (c *AbstractClient) ConnectToReplicas() {
+	log.Printf("Connecting to replicas...\n")
+	c.replicaConns = make([][]net.Conn, c.numLeaders)
+	for i := range(c.replicaConns){
+		c.replicaConns[i] = make([]net.Conn, len(c.replicasPerShard[i]))
+	}
+	c.replicaReaders = make([][]*bufio.Reader, c.numLeaders)
+	for i := range(c.replicaReaders){
+		c.replicaReaders[i] = make([]*bufio.Reader, len(c.replicasPerShard[i]))
+	}
+	c.replicaWriters = make([][]*bufio.Writer, c.numLeaders)
+	for i := range(c.replicaWriters){
+		c.replicaWriters[i] = make([]*bufio.Writer, len(c.replicasPerShard[i]))
+	}
+	c.replicaRetries = make([][]int, c.numLeaders)
+	for i := range(c.replicaRetries){
+		c.replicaRetries[i] = make([]int, len(c.replicasPerShard[i]))
+	}
+	c.replicaAlive = make([][]bool, c.numLeaders)
+	for i := range(c.replicaAlive){
+		c.replicaAlive[i] = make([]bool, len(c.replicasPerShard[i]))
+	}
+	// Add existing shard leader connections
+	for i := 0; i < c.numLeaders; i++ {
+		c.replicaConns[i][0] = c.leaders[i]
+		c.replicaReaders[i][0] = c.readers[i]
+		c.replicaWriters[i][0] = c.writers[i]
+	}
+
+	// Create new connections for rest of replicas
+	for i := 0; i < len(c.replicasPerShard); i++ {
+		for j := 1; j < len(c.replicasPerShard[i]); j++ {
+			if !c.connectToReplica(i, j) {
+				log.Fatalf("Must connect to all shard replicas on startup.\n")
+			}
+		}
+		
+	}
+	log.Printf("Successfully connected to all replicas.\n")
+}
+
+func (c *AbstractClient) connectToReplica(i int, j int) bool {
+	var err error
+	if c.replicaConns[i][j] != nil {
+		c.replicaConns[i][j].Close()
+	}
+	c.replicaRetries[i][j]++
+	log.Printf("Dialing shard %d replica %d with addr %s\n", i, j, c.replicasPerShard[i][j])
+	c.replicaConns[i][j], err = net.Dial("tcp", c.replicasPerShard[i][j])
+	if err != nil {
+		log.Printf("Error connecting to replica %d: %v\n", c.replicasPerShard[i][j], err)
+		return false
+	}
+	log.Printf("Connected to shard %d replica %d with connection %s\n", i, j, c.replicasPerShard[i][j])
+	c.replicaReaders[i][j] = bufio.NewReader(c.replicaConns[i][j])
+	c.replicaWriters[i][j] = bufio.NewWriter(c.replicaConns[i][j])
+
+	var idBytes [4]byte
+	idBytesS := idBytes[:4]
+	binary.LittleEndian.PutUint32(idBytesS, uint32(c.id))
+	c.replicaWriters[i][j].Write(idBytesS)
+	c.replicaWriters[i][j].Flush()
+
+	c.replicaAlive[i][j] = true
+	go c.replicaListener(i,j)
+	return true
 }
 
 func (c *AbstractClient) connectToLeader(i int) bool {
@@ -211,73 +312,98 @@ func (c *AbstractClient) GetShardFromKey(k state.Key) int {
 	return int(k) % nShards
 }
 
-// func (c *AbstractClient) DetermineReplicaPings() {
-// 	log.Printf("Determining replica pings...\n")
-// 	for i := 0; i < c.numLeaders; i++ {
-// 	}
+func (c *AbstractClient) DetermineReplicaPings() {
+	c.replicaPing = make([][]uint64, c.numLeaders)
+	for i := range(c.replicaPing){
+		c.replicaPing[i] = make([]uint64, len(c.replicasPerShard[i]))
+	}
+	c.replicasByPingRank = make([][]int32, c.numLeaders)
+	for i := range(c.replicasByPingRank){
+		c.replicasByPingRank[i] = make([]int32, len(c.replicasPerShard[i]))
+	}
 
-// 	done := make(chan bool, c.numLeaders)
-// 	for i := 0; i < c.numLeaders; i++ {
-// 		go c.pingReplica(i, done)
-// 	}
+	log.Printf("Determining replica pings...\n")
 
-// 	for i := 0; i < c.numLeaders; i++ {
-// 		if ok := <-done; !ok {
-// 			log.Fatalf("Must successfully ping all replicas on startup.\n")
-// 		}
-// 	}
+	done := make(chan bool, len(c.replicasPerShard)*len(c.replicasPerShard[0]))
 
-// 	// mini selection sort
-// 	for i := 0; i < c.numLeaders; i++ {
-// 		c.replicasByPingRank[i] = int32(i)
-// 		for j := i + 1; j < c.numLeaders; j++ {
-// 			if c.replicaPing[j] < c.replicaPing[c.replicasByPingRank[i]] {
-// 				c.replicasByPingRank[i] = int32(j)
-// 			}
-// 		}
-// 	}
-// 	log.Printf("Successfully pinged all replicas!\n")
-// }
+	for i := 0; i < len(c.replicasPerShard); i++ {
+		for j := 0; j < len(c.replicasPerShard[0]); j++{
+			go c.pingReplica(i, j, done)
+		}
+	}
 
-// func (c *AbstractClient) pingReplica(i int, done chan bool) {
-// 	var err error
-// 	log.Printf("Sending ping to replica %d\n", i)
-// 	err = c.writers[i].WriteByte(clientproto.GEN_PING)
-// 	if err != nil {
-// 		log.Printf("Error writing GEN_PING opcode to replica %d: %v\n", i, err)
-// 		done <- false
-// 		return
-// 	}
-// 	ping := &clientproto.Ping{c.id, uint64(time.Now().UnixNano())}
-// 	ping.Marshal(c.writers[i])
-// 	err = c.writers[i].Flush()
-// 	if err != nil {
-// 		log.Printf("Error flushing connection to replica %d: %v\n", i, err)
-// 		done <- false
-// 		return
-// 	}
-// 	select {
-// 	case pingReplyS := <-c.pingReplyChan:
-// 		pingReply := pingReplyS.(*clientproto.PingReply)
-// 		c.replicaPing[pingReply.ReplicaId] = uint64(time.Now().UnixNano()) -
-// 			pingReply.Ts
-// 		log.Printf("Received ping from replica %d in time %d\n",
-// 			pingReply.ReplicaId, c.replicaPing[pingReply.ReplicaId])
-// 		done <- true
-// 		log.Printf("Done pinging replica %d.\n", i)
-// 		break
-// 	case <-time.After(TIMEOUT_SECS * time.Second):
-// 		log.Printf("Timeout out pinging replica %d.\n", i)
-// 		for c.retries[i] < MAX_RETRIES {
-// 			if c.connectToLeader(i) {
-// 				c.pingReplica(i, done)
-// 				return
-// 			}
-// 		}
-// 		done <- false
-// 		break
-// 	}
-// }
+	for i := 0; i < len(c.replicasPerShard)*len(c.replicasPerShard[0]); i++ {
+		if ok := <-done; !ok {
+			log.Fatalf("Must successfully ping all replicas on startup.\n")
+		}
+	}
+
+	// mini selection sort
+	for i := range c.replicasByPingRank {
+		for j := range c.replicasByPingRank[i] {
+			c.replicasByPingRank[i][j] = int32(j)
+		}
+	}
+
+	for i := 0; i < len(c.replicasByPingRank); i++ {
+		rank := c.replicasByPingRank[i]
+		log.Printf("ReplicaPing[%d] = %v\n", i, c.replicaPing[i])
+		for j := 0; j < len(rank); j++ {
+			minIndex := j
+			for k := j + 1; k < len(rank); k++ {
+				if c.replicaPing[i][rank[k]] < c.replicaPing[i][rank[minIndex]] {
+					minIndex = k
+				}
+			}
+			rank[j], rank[minIndex] = rank[minIndex], rank[j]
+		}
+		c.replicasByPingRank[i] = rank
+		log.Printf("Ordered replicasByPingRank[%d] = %v\n", i, rank)
+	}
+	log.Printf("Successfully pinged all replicas!\n")
+}
+
+func (c *AbstractClient) pingReplica(i int, j int, done chan bool) {
+	var err error
+	log.Printf("Sending ping to replica %s\n", c.replicasPerShard[i][j])
+	err = c.replicaWriters[i][j].WriteByte(clientproto.GEN_PING)
+	log.Printf("Wrote GEN_PING opcode to replica %s\n", c.replicasPerShard[i][j])
+	if err != nil {
+		log.Printf("Error writing GEN_PING opcode to replica %d: %v\n", c.replicasPerShard[i][j], err)
+		done <- false
+		return
+	}
+	ping := &clientproto.Ping{c.id, uint64(time.Now().UnixNano())}
+	ping.Marshal(c.replicaWriters[i][j])
+	err = c.replicaWriters[i][j].Flush()
+	log.Printf("Flushed ping to replica %d\n", c.replicasPerShard[i][j])
+	if err != nil {
+		log.Printf("Error flushing connection to replica %d: %v\n", c.replicasPerShard[i][j], err)
+		done <- false
+		return
+	}
+	select {
+	case pingReplyS := <-c.pingReplyChan:
+		pingReply := pingReplyS.(*clientproto.PingReply)
+		c.replicaPing[0][pingReply.ReplicaId] = uint64(time.Now().UnixNano()) -
+			pingReply.Ts
+		log.Printf("Received ping from shard %d replica %d in time %d\n",
+			0, pingReply.ReplicaId, c.replicaPing[0][pingReply.ReplicaId])
+		done <- true
+		log.Printf("Done pinging shard %d replica %d.\n", i, j)
+		break
+	case <-time.After(TIMEOUT_SECS * time.Second):
+		log.Printf("Timeout out pinging shard %d replica %d.\n", i, j)
+		for c.retries[i] < MAX_RETRIES {
+			if c.connectToReplica(i, j) {
+				c.pingReplica(i, j, done)
+				return
+			}
+		}
+		done <- false
+		break
+	}
+}
 
 func (c *AbstractClient) RegisterRPC(msgObj fastrpc.Serializable,
 	opCode uint8, notify chan fastrpc.Serializable) {
@@ -323,5 +449,34 @@ func (c *AbstractClient) leaderListener(leader int) {
 	if err != nil && err != io.EOF {
 		log.Printf("Error %s from replica %d: %v\n", errS, leader, err)
 		c.leaderAlive[leader] = false
+	}
+}
+
+func (c *AbstractClient) replicaListener(i int, j int) {
+	var msgType byte
+	var err error
+	var errS string
+	for !c.shutdown && err == nil {
+		if msgType, err = c.replicaReaders[i][j].ReadByte(); err != nil {
+			dlog.Printf("&&&&&&&&&&&&&&&&&Got this error from replica %d at time %v: %v\n", c.replicasPerShard[i][j], time.Now().UnixMilli(), err)
+			errS = "reading opcode"
+			break
+		}
+
+		if rpair, present := c.rpcTable[msgType]; present {
+			obj := rpair.Obj.New()
+			if err = obj.Unmarshal(c.replicaReaders[i][j]); err != nil {
+				errS = "unmarshling message"
+				break
+			}
+			rpair.Chan <- obj
+		} else {
+			log.Printf("[replicaListener] Unknown message type %d (expected %d for PingReply)\n", msgType, clientproto.GEN_PING_REPLY)
+			log.Printf("B Error: received unknown message type: %d\n", msgType)
+		}
+	}
+	if err != nil && err != io.EOF {
+		log.Printf("Error %s from replica %d: %v\n", errS, c.replicasPerShard[i][j], err)
+		c.replicaAlive[i][j] = false
 	}
 }

@@ -31,6 +31,10 @@ func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader i
 	}
 	pc.RegisterRPC(new(genericsmrproto.ProposeReplyTS), clientproto.GEN_PROPOSE_REPLY,
 		pc.proposeReplyChan)
+	if noLeader {
+		pc.ConnectToReplicas()
+		pc.DetermineReplicaPings()
+	}
 	return pc
 }
 
@@ -104,21 +108,24 @@ func (c *ProposeClient) sendProposeAndReadReply() (bool, int64) {
 
 func (c *ProposeClient) sendPropose() {
 	if !c.fast {
-		replica := c.GetShardFromKey(c.propose.Command.K)
+		shard := c.GetShardFromKey(c.propose.Command.K)
+		replica := shard
 		if c.noLeader {
 			if c.forceLeader >= 0 {
 				replica = c.forceLeader
 			} else {
-				// panic("shouldn't be here...PingRank isn't implemented")
-				replica = int(c.replicasByPingRank[0])
+				replica = int(c.replicasByPingRank[shard][0])
 			}
+			c.replicaWriters[shard][replica].WriteByte(clientproto.GEN_PROPOSE)
+			c.propose.Marshal(c.replicaWriters[shard][replica])
+			c.replicaWriters[shard][replica].Flush()
+		} else {
+			c.writers[replica].WriteByte(clientproto.GEN_PROPOSE)
+			c.propose.Marshal(c.writers[replica])
+			c.writers[replica].Flush()
 		}
-		// dlog.Printf("@Sending request to %d\n", replica)
-		c.writers[replica].WriteByte(clientproto.GEN_PROPOSE)
-		c.propose.Marshal(c.writers[replica])
-		c.writers[replica].Flush()
+		
 	} else {
-		//dlog.Printf("Sending request to all replicas\n")
 		for i := 0; i < c.numLeaders; i++ {
 			c.writers[i].WriteByte(clientproto.GEN_PROPOSE)
 			c.propose.Marshal(c.writers[i])
