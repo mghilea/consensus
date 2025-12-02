@@ -137,7 +137,7 @@ func tagtostring(t mdlinproto.Tag) string {
 func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
 	exec bool, dreply bool, durable bool, batch bool, epBatch bool, statsFile string, numShards int, epochLength int, fanout int) *Replica {
 	r := &Replica{
-		genericsmr.NewReplica(id, peerAddrList, numShards, thrifty, exec, dreply, false, statsFile),
+		genericsmr.NewReplica(0, id, peerAddrList, numShards, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),

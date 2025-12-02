@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"genericsmr"
 	"genericsmrproto"
+	"log"
 	"state"
 	"time"
 )
@@ -116,6 +117,8 @@ func (c *ProposeClient) sendPropose() {
 			} else {
 				replica = int(c.replicasByPingRank[shard][0])
 			}
+			log.Printf("Replicas by ping rank[%d]: %v\n", shard, c.replicasByPingRank[shard])
+			log.Printf("Replica: %d\n", replica)
 			c.replicaWriters[shard][replica].WriteByte(clientproto.GEN_PROPOSE)
 			c.propose.Marshal(c.replicaWriters[shard][replica])
 			c.replicaWriters[shard][replica].Flush()

@@ -49,6 +49,7 @@ var epaxosMode = flag.Bool("epaxosMode", false, "Run Gryff with same message pat
 var numShards = flag.Int("nshards", 1, "Number of shards.")
 var epochLength = flag.Int("epoch", 500, "Length between epochs")
 var fanout = flag.Int("fanout", 1, "Fanout")
+var shardIdx = flag.Int("shardIdx", 1, "Shard index")
 
 var statsFile = flag.String("statsFile", "", "Name of file to which stats should be written.")
 var memProfile = flag.String("memProfile", "", "Name of file to which a memory profile should be written.")
@@ -131,7 +132,7 @@ func main() {
 			*durable, *statsFile)
 	} else if *doEpaxos {
 		log.Println("Starting Egalitarian Paxos replica...")
-		rep = epaxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
+		rep = epaxos.NewReplica(*shardIdx, replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
 			*beacon, *durable, *statsFile, *noConflicts)
 	} else if *doMencius {
 		log.Println("Starting Mencius replica...")

@@ -128,12 +128,12 @@ type LeaderBookkeeping struct {
 	depReadTime       []time.Time
 }
 
-func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
+func NewReplica(shardIdx int, id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
 		exec bool, dreply bool, beacon bool, durable bool, statsFile string,
 		noConflicts bool) *Replica {
 	r := &Replica{
 		// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
-		genericsmr.NewReplica(id, peerAddrList, 0, thrifty, exec, dreply, true,
+		genericsmr.NewReplica(shardIdx, id, peerAddrList, 0, thrifty, exec, dreply, true,
 				statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),

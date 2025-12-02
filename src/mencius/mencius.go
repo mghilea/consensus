@@ -90,7 +90,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		skippedTo[i] = -1
 	}
 	// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
-	r := &Replica{genericsmr.NewReplica(id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
+	r := &Replica{genericsmr.NewReplica(0, id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE*4),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),

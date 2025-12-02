@@ -309,6 +309,7 @@ func (c *AbstractClient) connectToLeader(i int) bool {
 
 func (c *AbstractClient) GetShardFromKey(k state.Key) int {
 	nShards := len(c.leaders)
+	log.Printf("Determined shard %d for key %s\n", int(k) % nShards, k)
 	return int(k) % nShards
 }
 
@@ -385,10 +386,10 @@ func (c *AbstractClient) pingReplica(i int, j int, done chan bool) {
 	select {
 	case pingReplyS := <-c.pingReplyChan:
 		pingReply := pingReplyS.(*clientproto.PingReply)
-		c.replicaPing[0][pingReply.ReplicaId] = uint64(time.Now().UnixNano()) -
+		c.replicaPing[pingReply.ShardId][pingReply.ReplicaId] = uint64(time.Now().UnixNano()) -
 			pingReply.Ts
 		log.Printf("Received ping from shard %d replica %d in time %d\n",
-			0, pingReply.ReplicaId, c.replicaPing[0][pingReply.ReplicaId])
+			pingReply.ShardId, pingReply.ReplicaId, c.replicaPing[pingReply.ShardId][pingReply.ReplicaId])
 		done <- true
 		log.Printf("Done pinging shard %d replica %d.\n", i, j)
 		break

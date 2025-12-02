@@ -72,7 +72,7 @@ func (t *Ping) Unmarshal(wire io.Reader) error {
 }
 
 func (t *PingReply) BinarySize() (nbytes int, sizeKnown bool) {
-	return 12, true
+	return 16, true
 }
 
 type PingReplyCache struct {
@@ -105,34 +105,40 @@ func (p *PingReplyCache) Put(t *PingReply) {
 	p.mu.Unlock()
 }
 func (t *PingReply) Marshal(wire io.Writer) {
-	var b [12]byte
+	var b [16]byte
 	var bs []byte
-	bs = b[:12]
-	tmp32 := t.ReplicaId
+	bs = b[:16]
+	tmp32 := t.ShardId
 	bs[0] = byte(tmp32)
 	bs[1] = byte(tmp32 >> 8)
 	bs[2] = byte(tmp32 >> 16)
 	bs[3] = byte(tmp32 >> 24)
+	tmp32_1 := t.ReplicaId
+	bs[4] = byte(tmp32_1)
+	bs[5] = byte(tmp32_1 >> 8)
+	bs[6] = byte(tmp32_1 >> 16)
+	bs[7] = byte(tmp32_1 >> 24)
 	tmp64 := t.Ts
-	bs[4] = byte(tmp64)
-	bs[5] = byte(tmp64 >> 8)
-	bs[6] = byte(tmp64 >> 16)
-	bs[7] = byte(tmp64 >> 24)
-	bs[8] = byte(tmp64 >> 32)
-	bs[9] = byte(tmp64 >> 40)
-	bs[10] = byte(tmp64 >> 48)
-	bs[11] = byte(tmp64 >> 56)
+	bs[8] = byte(tmp64)
+	bs[9] = byte(tmp64 >> 8)
+	bs[10] = byte(tmp64 >> 16)
+	bs[11] = byte(tmp64 >> 24)
+	bs[12] = byte(tmp64 >> 32)
+	bs[13] = byte(tmp64 >> 40)
+	bs[14] = byte(tmp64 >> 48)
+	bs[15] = byte(tmp64 >> 56)
 	wire.Write(bs)
 }
 
 func (t *PingReply) Unmarshal(wire io.Reader) error {
-	var b [12]byte
+	var b [16]byte
 	var bs []byte
-	bs = b[:12]
-	if _, err := io.ReadAtLeast(wire, bs, 12); err != nil {
+	bs = b[:16]
+	if _, err := io.ReadAtLeast(wire, bs, 16); err != nil {
 		return err
 	}
-	t.ReplicaId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-	t.Ts = uint64((uint64(bs[4]) | (uint64(bs[5]) << 8) | (uint64(bs[6]) << 16) | (uint64(bs[7]) << 24) | (uint64(bs[8]) << 32) | (uint64(bs[9]) << 40) | (uint64(bs[10]) << 48) | (uint64(bs[11]) << 56)))
+	t.ShardId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
+	t.ReplicaId = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
+	t.Ts = uint64((uint64(bs[8]) | (uint64(bs[9]) << 8) | (uint64(bs[10]) << 16) | (uint64(bs[11]) << 24) | (uint64(bs[12]) << 32) | (uint64(bs[13]) << 40) | (uint64(bs[14]) << 48) | (uint64(bs[15]) << 56)))
 	return nil
 }

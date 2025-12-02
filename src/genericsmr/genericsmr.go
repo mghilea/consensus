@@ -114,7 +114,7 @@ type Replica struct {
 	delayedRPC       []map[uint8]chan fastrpc.Serializable
 }
 
-func NewReplica(id int, peerAddrList []string, numShards int, thrifty bool, exec bool, dreply bool, clientConnect bool, statsFile string) *Replica {
+func NewReplica(shardIdx int, id int, peerAddrList []string, numShards int, thrifty bool, exec bool, dreply bool, clientConnect bool, statsFile string) *Replica {
 	r := &Replica{
 		len(peerAddrList),
 		int32(id),
@@ -122,7 +122,7 @@ func NewReplica(id int, peerAddrList []string, numShards int, thrifty bool, exec
 		make([]net.Conn, len(peerAddrList)),
 		make([]*bufio.Reader, len(peerAddrList)),
 		make([]*bufio.Writer, len(peerAddrList)),
-		0,
+		int32(shardIdx),
 		make([]string, numShards),
 		make([]net.Conn, numShards),
                 make([]*bufio.Reader, numShards),
@@ -272,7 +272,7 @@ func (r *Replica) monitorPings() {
 func (r *Replica) handlePing(ping *clientproto.Ping, w *bufio.Writer) {
 	log.Printf("Received Ping from client %d\n", ping.ClientId)
 	w.WriteByte(clientproto.GEN_PING_REPLY)
-	pingReply := &clientproto.PingReply{r.Id, ping.Ts}
+	pingReply := &clientproto.PingReply{r.ShardId, r.Id, ping.Ts}
 	pingReply.Marshal(w)
 	w.Flush()
 }

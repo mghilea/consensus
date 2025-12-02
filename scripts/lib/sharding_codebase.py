@@ -106,8 +106,6 @@ class ShardingCodebase(ExperimentCodebase):
                 client_command += ' -regular'
             if config['replication_protocol_settings']['client_sequential_consistency']:
                 client_command += ' -sequential'
-        elif config['replication_protocol'] == 'epaxos':
-            client_command += ' -forceLeader %d' % i
         if 'proxy_operations' in config['replication_protocol_settings'] and config['replication_protocol_settings']['proxy_operations']:
             client_command += ' -proxy'
         if 'server_thrifty' in config['replication_protocol_settings'] and config['replication_protocol_settings']['server_thrifty']:

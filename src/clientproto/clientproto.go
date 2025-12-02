@@ -48,6 +48,7 @@ type Ping struct {
 }
 
 type PingReply struct {
+	ShardId   int32
 	ReplicaId int32
 	Ts        uint64
 }
