@@ -309,7 +309,6 @@ func (c *AbstractClient) connectToLeader(i int) bool {
 
 func (c *AbstractClient) GetShardFromKey(k state.Key) int {
 	nShards := len(c.leaders)
-	log.Printf("Determined shard %d for key %s\n", int(k) % nShards, k)
 	return int(k) % nShards
 }
 
