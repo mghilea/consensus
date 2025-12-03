@@ -78,7 +78,7 @@ type LeaderBookkeeping struct {
 func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
     exec bool, dreply bool, beacon bool, durable bool, statsFile string, batch bool, epochLength int) *Replica {
 	// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
-	r := &Replica{genericsmr.NewReplica(0, id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
+	r := &Replica{genericsmr.NewReplica(1, id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),

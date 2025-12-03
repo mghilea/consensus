@@ -10,7 +10,7 @@ import (
 
 func initReplica() *Replica {
 	peers := make([]string, 3)
-	r := &Replica{genericsmr.NewReplica(0, peers, false, false, false),
+	r := &Replica{genericsmr.NewReplica(1, peers, false, false, false),
 		make(chan *Propose, CHAN_BUFFER_SIZE),
 		make(chan *epaxosproto.Prepare, CHAN_BUFFER_SIZE),
 		make(chan *epaxosproto.PreAccept, CHAN_BUFFER_SIZE),
