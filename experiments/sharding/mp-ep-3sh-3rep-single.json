@@ -21,14 +21,8 @@
   ],
   "server_names": [
       "us-east-1-0",
-      "us-east-1-1",
-      "us-east-1-2",
       "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
+      "eu-west-1-0"
   ],
   "num_shards": 3,
   "shards": [
@@ -50,55 +44,49 @@
   ],
   "clients": [
 	  "client-0-0",
+    "client-0-1",
+    "client-0-2",
 	  "client-1-0",
+    "client-1-1",
+    "client-1-2",
 	  "client-2-0",
-    "client-3-0",
-	  "client-4-0",
-	  "client-5-0",
-    "client-6-0",
-	  "client-7-0",
-	  "client-8-0"
+    "client-2-1",
+    "client-2-2"
   ],
   "server_regions": {
     "virginia": [
       "us-east-1-0",
-      "us-east-1-1",
-      "us-east-1-2",
       "client-0-0",
-      "client-1-0",
-      "client-2-0"
+      "client-0-1",
+      "client-0-2"
     ],
     "california": [
       "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2",
-      "client-3-0",
-      "client-4-0",
-      "client-5-0"
+      "client-1-0",
+      "client-1-1",
+      "client-1-2"
     ],
     "ireland": [
       "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "client-6-0",
-      "client-7-0",
-      "client-8-0"
+      "client-2-0",
+      "client-2-1",
+      "client-2-2"
     ]
   },
   "region_rtt_latencies": {
       "california": {
         "california": 0,
-        "virginia": 72,
-        "ireland": 151
+        "virginia": 85,
+        "ireland": 156
       },
       "virginia": {
-        "california": 72,
+        "california": 85,
         "virginia": 0,
-        "ireland": 88
+        "ireland": 90
       },
       "ireland": {
-        "california": 151,
-        "virginia": 88,
+        "california": 156,
+        "virginia": 90,
         "ireland": 0
       }
   },
@@ -173,7 +161,7 @@
   "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
-  "client_debug_output": false,
+  "client_debug_output": true,
   "client_experiment_length": 30,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
@@ -185,7 +173,7 @@
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "rghilea-282720",
+  "experiment_name": "rghilea-286438",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,
@@ -202,7 +190,7 @@
   "server_bin_name": "server",
   "server_cpuprofile": false,
   "server_blockprofile": false,
-  "server_debug_output": false,
+  "server_debug_output": true,
   "server_durable": false,
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
