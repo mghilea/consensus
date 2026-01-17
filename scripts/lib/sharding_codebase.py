@@ -54,7 +54,12 @@ class ShardingCodebase(ExperimentCodebase):
 
         client_id = i * config['client_processes_per_client_node'] + k
 
-        client_command = ' '.join([str(x) for x in [
+        client_command = ""
+
+        if 'max_file_descriptors' in config:
+            client_command += ' ulimit -n %d; ' % config['max_file_descriptors']
+
+        client_command += ' '.join([str(x) for x in [
             path_to_client_bin,
             '-clientId', client_id,
             '-expLength', config['client_experiment_length'],
@@ -180,7 +185,12 @@ class ShardingCodebase(ExperimentCodebase):
         replica_port = get_replica_port(config, shard_idx, replica_idx)
         replica_rpc_port = get_replica_rpc_port(config, shard_idx, replica_idx)
 
-        replica_command = ' '.join([str(x) for x in [
+        replica_command = ""
+
+        if 'max_file_descriptors' in config:
+            replica_command += ' ulimit -n %d; ' % config['max_file_descriptors']
+
+        replica_command += ' '.join([str(x) for x in [
             path_to_server_bin,
             '-addr', replica_host,
             '-port', replica_port,
