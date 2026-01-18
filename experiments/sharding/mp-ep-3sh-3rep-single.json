@@ -254,6 +254,7 @@
   "master_port": 7077,
   "max_bandwidth": "10gibps",
   "max_file_descriptors": 65535,
+  "sshd_file_descriptors": 524288,
   "max_retries": 0,
   "num_experiment_runs": 1,
   "out_directory_name": "out",
