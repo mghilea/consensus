@@ -62,7 +62,6 @@ class ShardingCodebase(ExperimentCodebase):
                 "mkdir -p /etc/systemd/system/sshd.service.d && "
                 "echo -e '[Service]\\nLimitNOFILE=%d' > /etc/systemd/system/sshd.service.d/limits.conf && "
                 "systemctl daemon-reexec && "
-                "systemctl restart sshd && "
             ) % config['sshd_file_descriptors']
 
         # Raise client process FD limit if configured
@@ -203,7 +202,6 @@ class ShardingCodebase(ExperimentCodebase):
                 "mkdir -p /etc/systemd/system/sshd.service.d && "
                 "echo -e '[Service]\\nLimitNOFILE=%d' > /etc/systemd/system/sshd.service.d/limits.conf && "
                 "systemctl daemon-reexec && "
-                "systemctl restart sshd && "
             ) % config['sshd_file_descriptors']
 
         # Raise replica process FD limit if configured

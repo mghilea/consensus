@@ -163,12 +163,12 @@
       }
   },
   "client_total": [
-    [45],
-    [45]
+    [46080],
+    [46080]
   ],
   "client_processes_per_client_node": [
-    [1],
-    [1]
+    [1024],
+    [1024]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
