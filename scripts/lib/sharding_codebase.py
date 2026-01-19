@@ -56,13 +56,15 @@ class ShardingCodebase(ExperimentCodebase):
 
         client_command = ""
 
-        # # Raise sshd file descriptor limit if configured
-        # if 'sshd_file_descriptors' in config:
-        #     client_command += (
-        #         "mkdir -p /etc/systemd/system/sshd.service.d && "
-        #         "echo -e '[Service]\\nLimitNOFILE=%d' > /etc/systemd/system/sshd.service.d/limits.conf && "
-        #         "systemctl daemon-reexec && "
-        #     ) % config['sshd_file_descriptors']
+        client_command += (
+            "sudo echo '* soft nofile 655350' >> /etc/security/limits.conf;"
+            "sudo echo '* hard nofile 655350' >> /etc/security/limits.conf;"
+            "sudo echo '* hard nproc 65535000' >> /etc/security/limits.conf;"
+            "sudo echo '* soft nproc 65535000' >> /etc/security/limits.conf;"
+            "sudo echo '* soft stack 524288000' >> /etc/security/limits.conf;"
+            "sudo echo '* hard stack 524288000' >> /etc/security/limits.conf;"
+            "sudo echo 'session required /lib/security/pam_limits.so' >> /etc/pam.d/login;"
+        )
 
         # Raise client process FD limit if configured
         if 'max_file_descriptors' in config:
@@ -195,14 +197,16 @@ class ShardingCodebase(ExperimentCodebase):
         replica_rpc_port = get_replica_rpc_port(config, shard_idx, replica_idx)
 
         replica_command = ""
-
-        # # Raise sshd file descriptor limit if configured
-        # if 'sshd_file_descriptors' in config:
-        #     replica_command += (
-        #         "mkdir -p /etc/systemd/system/sshd.service.d && "
-        #         "echo -e '[Service]\\nLimitNOFILE=%d' > /etc/systemd/system/sshd.service.d/limits.conf && "
-        #         "systemctl daemon-reexec && "
-        #     ) % config['sshd_file_descriptors']
+        
+        replica_command += (
+            "sudo echo '* soft nofile 655350' >> /etc/security/limits.conf;"
+            "sudo echo '* hard nofile 655350' >> /etc/security/limits.conf;"
+            "sudo echo '* hard nproc 65535000' >> /etc/security/limits.conf;"
+            "sudo echo '* soft nproc 65535000' >> /etc/security/limits.conf;"
+            "sudo echo '* soft stack 524288000' >> /etc/security/limits.conf;"
+            "sudo echo '* hard stack 524288000' >> /etc/security/limits.conf;"
+            "sudo echo 'session required /lib/security/pam_limits.so' >> /etc/pam.d/login;"
+        )
 
         # Raise replica process FD limit if configured
         if 'max_file_descriptors' in config:
