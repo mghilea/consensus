@@ -43,7 +43,7 @@
     ]
   ],
   "clients": [
-	  "client-0-0",
+	  "client-4-9",
     "client-0-1",
     "client-0-2",
     "client-0-3",
@@ -92,7 +92,7 @@
   "server_regions": {
     "virginia": [
       "us-east-1-0",
-      "client-0-0",
+      "client-4-9",
       "client-0-1",
       "client-0-2",
       "client-0-3",
