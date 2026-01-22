@@ -1,0 +1,327 @@
+{
+  "experiment_independent_vars": [
+          ["replication_protocol", "replication_protocol_settings", "plot_cdf_series_title", "plot_tput_lat_series_title", "client_total", "client_processes_per_client_node"],
+          ["client_total", "client_processes_per_client_node"]
+  ],
+  "replication_protocol":[
+          "multi_paxos", "epaxos"
+  ],
+  "replication_protocol_settings": [
+    {
+            "server_delay_reply": true,
+      "server_execute_commands": true,
+      "server_thrifty": true
+    },
+    {
+            "server_delay_reply": true,
+      "server_execute_commands": true,
+      "server_thrifty": true
+    }
+
+  ],
+  "server_names": [
+      "us-west-1-0",
+      "us-west-2-0",
+      "us-east-1-0",
+      "ap-east-1-0",
+      "eu-west-1-0"
+  ],
+  "num_shards": 5,
+  "shards": [
+        [
+      "us-west-1-0",
+      "us-west-2-0",
+      "us-east-1-0",
+      "ap-east-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0",
+      "us-west-2-0",
+      "ap-east-1-0"
+    ],
+    [
+      "eu-west-1-0",
+      "us-east-1-0",
+      "us-west-1-0",
+      "us-west-2-0",
+      "ap-east-1-0"
+    ],
+    [
+      "ap-east-1-0",
+      "us-west-1-0",
+      "us-west-2-0",
+      "us-east-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-west-2-0",
+      "us-west-1-0",
+      "us-east-1-0",
+      "ap-east-1-0",
+      "eu-west-1-0"
+    ]
+  ],
+  "clients": [
+        "client-4-9",
+    "client-0-1",
+    "client-0-2",
+    "client-0-3",
+    "client-0-4",
+    "client-0-5",
+    "client-0-6",
+    "client-0-7",
+    "client-0-8",
+    "client-0-9",
+        "client-1-0",
+    "client-1-1",
+    "client-1-2",
+    "client-1-3",
+    "client-1-4",
+    "client-1-5",
+    "client-1-6",
+    "client-1-7",
+    "client-1-8",
+    "client-1-9",
+    "client-2-0",
+    "client-2-1",
+    "client-2-2",
+    "client-2-3",
+    "client-2-4",
+    "client-2-5",
+    "client-2-6",
+    "client-2-7",
+    "client-2-8",
+    "client-2-9",
+    "client-3-0",
+    "client-3-1",
+    "client-3-2",
+    "client-3-3",
+    "client-3-4",
+    "client-3-5",
+    "client-3-6",
+    "client-3-7",
+    "client-3-8",
+    "client-3-9",
+    "client-4-0",
+    "client-4-1",
+    "client-4-2",
+    "client-4-3",
+    "client-4-4"
+  ],
+  "server_regions": {
+    "virginia": [
+      "us-east-1-0",
+      "client-4-9",
+      "client-0-1",
+      "client-0-2",
+      "client-0-3",
+      "client-0-4",
+      "client-0-5",
+      "client-0-6",
+      "client-0-7",
+      "client-0-8"
+    ],
+    "california": [
+      "us-west-1-0",
+      "client-1-0",
+      "client-1-1",
+      "client-1-2",
+      "client-1-3",
+      "client-1-4",
+      "client-1-5",
+      "client-1-6",
+      "client-1-7",
+      "client-1-8"
+    ],
+    "ireland": [
+      "eu-west-1-0",
+      "client-2-0",
+      "client-2-1",
+      "client-2-2",
+      "client-2-3",
+      "client-2-4",
+      "client-2-5",
+      "client-2-6",
+      "client-2-7",
+      "client-2-8"
+    ],
+    "japan": [
+      "ap-east-1-0",
+      "client-3-0",
+      "client-3-1",
+      "client-3-2",
+      "client-3-3",
+      "client-3-4",
+      "client-3-5",
+      "client-3-6",
+      "client-3-7",
+      "client-3-8"
+    ],
+    "oregon": [
+      "us-west-2-0",
+      "client-4-0",
+      "client-4-1",
+      "client-4-2",
+      "client-4-3",
+      "client-4-4",
+      "client-0-9",
+      "client-1-9",
+      "client-2-9",
+      "client-3-9"
+    ]
+  },
+  "region_rtt_latencies": {
+      "california": {
+        "california": 0,
+        "virginia": 85,
+        "ireland": 156,
+        "japan": 118,
+        "oregon" : 21
+      },
+      "virginia": {
+        "california": 85,
+        "virginia": 0,
+        "ireland": 90,
+        "japan": 180,
+        "oregon" : 95
+      },
+      "ireland": {
+        "california": 156,
+        "virginia": 90,
+        "ireland": 0,
+        "japan": 278,
+        "oregon" : 185
+      },
+      "japan": {
+        "california": 118,
+        "virginia": 180,
+        "ireland": 278,
+        "japan": 0,
+        "oregon" : 127
+      },
+      "oregon": {
+        "california": 21,
+        "virginia": 95,
+        "ireland": 185,
+        "japan": 127,
+        "oregon" : 0
+      }
+  },
+  "client_total": [
+    [45, 90, 180, 360, 720, 1440, 2880, 5760, 11520, 23040, 46080],
+    [45, 90, 180, 360, 720, 1440, 2880, 5760, 11520, 23040, 46080]
+  ],
+  "client_processes_per_client_node": [
+    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],
+    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+  ],
+  "client_threads_per_process": 1,
+  "client_conflict_percentage": -1,
+  "client_write_percentage": 1000,
+  "client_read_percentage": 0,
+  "client_rmw_percentage": 0,
+  "client_fanout": 1,
+  "server_epoch": 1,
+  "cdf_plots": {
+    "font": "DejaVu Sans,12",
+    "height": 600,
+    "width": 800,
+    "x_label": "Latency (ms)",
+    "y_label": "Cumulative ratio of operations"
+  },
+  "plots": [
+    {
+      "name": "tput-lat-p99",
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "width": 800,
+      "series_indep_vars_idx": 0,
+      "series_titles": ["Multi-Paxos", "EPaxos"],
+      "x_var_is_config": false,
+      "x_var": ["run_stats", "app", "tput", "p50"],
+      "x_label": "Throughput (ops/s)",
+      "y_label": "p99 Latency",
+      "x_indep_vars_idx": 1,
+      "y_var": ["aggregate", "app", "p99"]
+    },
+    {
+      "name": "tput-lat-p50",
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "width": 800,
+      "series_indep_vars_idx": 0,
+      "series_titles": ["Multi-Paxos", "EPaxos"],
+      "x_var_is_config": false,
+      "x_var": ["run_stats", "app", "tput", "p50"],
+      "x_label": "Throughput (ops/s)",
+      "y_label": "p50 Latency",
+      "x_indep_vars_idx": 1,
+      "y_var": ["aggregate", "app", "p50"]
+    }
+  ],
+  "plot_cdf_png_font": "DejaVu Sans,12",
+  "plot_cdf_png_height": 600,
+  "plot_cdf_png_width": 800,
+  "plot_cdf_series_title": ["Multi-Paxos", "EPaxos"],
+  "plot_cdf_x_label": "Latency (ms)",
+  "plot_cdf_y_label": "Cumulative ratio of operations",
+  "plot_directory_name": "plots",
+  "plot_tput_lat_png_font": "DejaVu Sans,12",
+  "plot_tput_lat_png_height": 600,
+  "plot_tput_lat_png_width": 800,
+  "plot_tput_lat_series_title": ["Multi-Paxos", "EPaxos"],
+  "plot_tput_lat_x_label": "Throughput (ops/sec)",
+  "plot_tput_lat_y_label": "Latency (ms)",
+  "base_local_exp_directory": "/users/rghilea/consensus/experiments/sharding/results/mp-ep-3",
+  "base_mounted_fs_path": "/mnt/extra",
+  "base_remote_bin_directory_nfs": "/users/rghilea/consensus",
+  "base_remote_exp_directory": "/mnt/extra/experiments",
+  "bin_directory_name": "bin",
+  "client_bin_name": "clientnew",
+  "client_debug_output": false,
+  "client_experiment_length": 30,
+  "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
+  "client_name_format_str": "%s",
+  "client_max_processors": 2,
+  "client_num_keys": 1000000,
+  "client_ramp_down": 10,
+  "client_ramp_up": 10,
+  "client_random_coordinator": false,
+  "client_zipfian_s": 0,
+  "client_zipfian_v": 1,
+  "emulab_user": "root",
+  "experiment_name": "rghilea-286547",
+  "use_coordinator": true,
+  "coordinator_bin_name": "coordinator",
+  "coordinator_port": 7067,
+  "use_masters": true,
+  "master_bin_name": "master",
+  "master_port": 7077,
+  "max_bandwidth": "10gibps",
+  "max_file_descriptors": 65535,
+  "max_retries": 0,
+  "num_experiment_runs": 1,
+  "out_directory_name": "out",
+  "project_name": "cops-pg0",
+  "stats_file_name": "stats.json",
+  "server_bin_name": "server",
+  "server_cpuprofile": false,
+  "server_blockprofile": false,
+  "server_debug_output": false,
+  "server_durable": false,
+  "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
+  "server_port": 7087,
+  "server_rpc_port": 8087,
+  "src_commit_hash": "scripts",
+  "src_directory": "/users/rghilea/consensus",
+  "codebase_name": "sharding",
+  "remote_bin_directory_nfs_enabled": false,
+  "server_emulate_wan": true,
+  "run_locally": false,
+  "default_remote_shell": "bash",
+  "client_disable_gc": true,
+  "server_disable_gc": true
+}
