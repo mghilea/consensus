@@ -123,12 +123,12 @@
       }
   },
   "client_total": [
-    [30, 60, 120, 240, 480, 960, 1920, 3840, 7680],
-    [30, 60, 120, 240, 480, 960, 1920, 3840, 7680]
+    [7680],
+    [7680]
   ],
   "client_processes_per_client_node": [
-    [1, 2, 4, 8, 16, 32, 64, 128, 256],
-    [1, 2, 4, 8, 16, 32, 64, 128, 256]
+    [256],
+    [256]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -205,7 +205,7 @@
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "rghilea-286547",
+  "experiment_name": "rghilea-287409",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,
@@ -213,7 +213,7 @@
   "master_bin_name": "master",
   "master_port": 7077,
   "max_bandwidth": "10gibps",
-  "max_file_descriptors": 65535,
+  "max_file_descriptors": 655350,
   "max_retries": 0,
   "num_experiment_runs": 1,
   "out_directory_name": "out",

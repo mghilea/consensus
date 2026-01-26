@@ -163,12 +163,12 @@
       }
   },
   "client_total": [
-    [11520],
-    [11520]
+    [67500],
+    [67500]
   ],
   "client_processes_per_client_node": [
-    [256],
-    [256]
+    [1500],
+    [1500]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -253,7 +253,7 @@
   "master_bin_name": "master",
   "master_port": 7077,
   "max_bandwidth": "10gibps",
-  "max_file_descriptors": 65535,
+  "max_file_descriptors": 655350,
   "max_retries": 0,
   "num_experiment_runs": 1,
   "out_directory_name": "out",

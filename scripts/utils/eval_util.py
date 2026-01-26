@@ -27,219 +27,197 @@ def get_regions(config):
     return set([get_region(config, s) for s in config["clients"] + config["server_names"]])
 
 
-def calculate_statistics(config, local_out_directory):
+def calculate_statistics(config, local_out_directory, delete_files=True):
     runs = []
-    op_latencies = {}
-    op_latency_counts = {}
+    op_latencies = collections.defaultdict(list)
+    op_latency_counts = collections.defaultdict(int)
+
     for i in range(config['num_experiment_runs']):
-        stats, run_op_latencies, run_op_latency_counts = calculate_statistics_for_run(config, local_out_directory, i)
+        # Stream and aggregate logs for a single run
+        stats_run, run_op_latencies, run_op_latency_counts = calculate_statistics_for_run(
+            config, local_out_directory, i, delete_files=delete_files
+        )
         runs.append(stats)
 
-        for k, v in run_op_latencies.items():
-            for j in range(len(v)):
-                if k in op_latencies:
-                    if len(op_latencies[k]) <= j:
-                        op_latencies[k].append(v[j])
-                    else:
-                        op_latencies[k][j] += v[j]
-                else:
-                    op_latencies[k] = [v[j]]
-            if k in op_latency_counts:
-                op_latency_counts[k] += run_op_latency_counts[k]
-            else:
-                op_latency_counts[k] = run_op_latency_counts[k]
+        # Merge op_latencies incrementally
+        for k, v_list in run_op_latencies.items():
+            op_latencies[k].extend(v_list)
+        for k, count in run_op_latency_counts.items():
+            op_latency_counts[k] += count
 
-    stats = {}
-    stats['aggregate'] = {}
+    # Compute final aggregated stats
+    stats = {'aggregate': {}}
     calculate_all_op_statistics(config, stats['aggregate'], op_latencies, op_latency_counts)
+
+
+    # Compute per-run statistics for easier plotting/analysis
     stats['runs'] = runs
     stats['run_stats'] = {}
-    ignored = {'cdf': 1, 'cdf_log': 1, 'time': 1}
-    for cat in runs[0]: # we assume there is at least one run
-        if not ('region-' in cat) and type(runs[0][cat]) is dict:
-            stats['run_stats'][cat] = {}
-            for s in runs[0][cat]:
-                if s in ignored:
-                    continue
-                data = []
-                for run in runs:
-                    data.append(run[cat][s])
-                stats['run_stats'][cat][s] = calculate_statistics_for_data(data, cdf=False)
+    ignored = {'cdf', 'cdf_log', 'time'}
+
+    # Loop over first run keys to structure stats
+    first_run = runs[0] if runs else {}
+    for cat, cat_val in first_run.items():
         if 'region-' in cat:
             stats['run_stats'][cat] = {}
-            for cat2 in runs[0][cat]: # we assume there is at least one run
-                if type(runs[0][cat][cat2]) is dict:
-                    stats['run_stats'][cat][cat2] = {}
-                    for s in runs[0][cat][cat2]:
+            for subcat, subval in cat_val.items():
+                if isinstance(subval, dict):
+                    stats['run_stats'][cat][subcat] = {}
+                    for s, v in subval.items():
                         if s in ignored:
                             continue
-                        data = []
-                        for run in runs:
-                            data.append(run[cat][cat2][s])
-                        stats['run_stats'][cat][cat2][s] = calculate_statistics_for_data(data, cdf=False)
+                        data = [run[cat][subcat][s] for run in runs]
+                        stats['run_stats'][cat][subcat][s] = calculate_statistics_for_data(data, cdf=False)
+        elif isinstance(cat_val, dict):
+            stats['run_stats'][cat] = {}
+            for s, v in cat_val.items():
+                if s in ignored:
+                    continue
+                data = [run[cat][s] for run in runs]
+                stats['run_stats'][cat][s] = calculate_statistics_for_data(data, cdf=False)
 
-    stats_file = STATS_FILE if 'stats_file_name' not in config else config['stats_file_name']
-    with open(os.path.join(local_out_directory, stats_file), 'w') as f:
+    # Save final stats to JSON
+    stats_file = config.get('stats_file_name', "stats.json")
+    stats_path = os.path.join(local_out_directory, stats_file)
+    with open(stats_path, 'w') as f:
         json.dump(stats, f, indent=2, sort_keys=True)
+
     return stats, op_latencies
 
-def calculate_statistics_for_run(config, local_out_directory, run):
+def calculate_statistics_for_run(config, local_out_directory, run, delete_files=True):
     region_op_latencies = {}
     region_op_latency_counts = {}
 
     stats = {}
 
     regions = get_regions(config)
-    for region in regions:
-        op_latencies = {}
-        op_latency_counts = {}
+    input_scale = config.get('input_latency_scale', 1e9)
+    output_scale = config.get('output_latency_scale', 1e3)
+    blacklist = set(config.get('client_stats_blacklist', []))
+    combine_blacklist = set(config.get('client_combine_stats_blacklist', []))
 
+    for region in regions:
+        op_latencies = collections.defaultdict(list)
+        op_latency_counts = collections.defaultdict(int)
+
+        # Process client stats
         for client in config["clients"]:
             if get_region(config, client) != region:
                 continue
 
-            client_dir = client
+            client_dir = os.path.join(local_out_directory, client)
+
             for k in range(config["client_processes_per_client_node"]):
-                client_out_file = os.path.join(local_out_directory,
-                                               client_dir,
-                                               '%s-%d-stdout-%d.log' % (client, k, run))
+                # Process stdout log
+                client_out_file = os.path.join(client_dir, f"{client}-{k}-stdout-{run}.log")
 
-                with open(client_out_file) as f:
-                    ops = f.readlines()
-                    for op in ops:
-                        opCols = op.strip().split(',')
-                        for x in range(0, len(opCols), 2):
-                            if opCols[x].isdigit():
-                                break
-                            if not opCols[x] in config['client_stats_blacklist']:
-                                if 'input_latency_scale' in config:
-                                    opLat = float(opCols[x+1]) / config['input_latency_scale']
-                                else:
-                                    opLat = float(opCols[x+1]) / 1e9
-                                if 'output_latency_scale' in config:
-                                    opLat = opLat * config['output_latency_scale']
-                                else:
-                                    opLat = opLat * 1e3
+                if os.path.exists(client_out_file):
+                    with open(client_out_file) as f:
+                        for line in f:
+                            opCols = line.strip().split(',')
+                            for x in range(0, len(opCols), 2):
+                                op = opCols[x]
+                                if op.isdigit() or op in blacklist:
+                                    continue
+                                opVal = float(opCols[x+1]) / input_scale * output_scale
+                                op_latencies[op].append(opVal)
+                                op_latency_counts[op] += 1
+                                if op not in combine_blacklist:
+                                    op_latencies['combined'].append(opVal)
+                                    op_latency_counts['combined'] += 1
 
-                                if opCols[x] in op_latencies:
-                                    op_latencies[opCols[x]].append(opLat)
-                                else:
-                                    op_latencies[opCols[x]] = [opLat]
-                                if not opCols[x] in config['client_combine_stats_blacklist']:
-                                    if 'combined' in op_latencies:
-                                        op_latencies['combined'].append(opLat)
-                                    else:
-                                        op_latencies['combined'] = [opLat]
-                                    if 'combined' in op_latency_counts:
-                                        op_latency_counts['combined'] += 1
-                                    else:
-                                        op_latency_counts['combined'] = 1
-                                if opCols[x] in op_latency_counts:
-                                    op_latency_counts[opCols[x]] += 1
-                                else:
-                                    op_latency_counts[opCols[x]] = 1
+                    # Remove file that was just processed if debug mode is off                
+                    if delete_files:
+                        os.remove(client_out_file)
 
-                client_stats_file = os.path.join(local_out_directory,
-                        client_dir,
-                        '%s-%d-stats-%d.json' % (client, k, run))
-                try:
-                    with open(client_stats_file) as f:
-                        client_stats = json.load(f)
-                        for k, v in client_stats.items():
-                            if not type(v) is dict:
-                                if k not in stats:
-                                    stats[k] = v
-                                else:
-                                    stats[k] += v
-                except FileNotFoundError:
-                    print('No stats file %s.' % client_stats_file)
-                except json.decoder.JSONDecodeError:
-                    print('Invalid JSON file %s.' % client_stats_file)
+                # Process client stats JSON
+                client_stats_file = os.path.join(client_dir, f"{client}-{k}-stats-{run}.json")
+                if os.path.exists(client_stats_file):
+                    try:
+                        with open(client_stats_file) as f:
+                            client_stats = json.load(f)
+                            for k, v in client_stats.items():
+                                if isinstance(v, (int, float)):
+                                    stats[k] = stats.get(k, 0) + v
+                    except json.JSONDecodeError:
+                        print(f"Invalid JSON file {client_stats_file}")
+                    if delete_files:
+                        os.remove(client_stats_file)
 
-        for shard_idx in range(len(config["shards"])):
-            shard = config["shards"][shard_idx]
-            for replica_idx in range(len(shard)):
-                replica = shard[replica_idx]
+        # Process server stats
+        for shard_idx, shard in enumerate(config["shards"]):
+            for replica_idx, replica in enumerate(shard):
                 if get_region(config, replica) != region:
                     continue
-
                 server_stats_file = os.path.join(local_out_directory,
-                                                 'server-%d' % (shard_idx),
-                                                 'server-%d-%d-stats-%d.json' % (shard_idx, replica_idx, run))
-                print(server_stats_file)
-                try:
-                    with open(server_stats_file) as f:
-                        print(server_stats_file)
-                        server_stats = json.load(f)
-                        for k, v in server_stats.items():
-                            if not type(v) is dict:
-                                if k not in stats:
-                                    stats[k] = v
-                                else:
-                                    stats[k] += v
-                except FileNotFoundError:
-                    print('No stats file %s.' % server_stats_file)
-                except json.decoder.JSONDecodeError:
-                    print('Invalid JSON file %s.' % server_stats_file)
+                                                 f'server-{shard_idx}',
+                                                 f'server-{shard_idx}-{replica_idx}-stats-{run}.json')
+                if os.path.exists(server_stats_file):
+                    try:
+                        with open(server_stats_file) as f:
+                            server_stats = json.load(f)
+                            for k, v in server_stats.items():
+                                if isinstance(v, (int, float)):
+                                    stats[k] = stats.get(k, 0) + v
+                    except json.JSONDecodeError:
+                        print(f"Invalid JSON file {server_stats_file}")
+                    if delete_files:
+                        os.remove(server_stats_file)
 
-        # print('Region %d had op counts: w=%d, r=%d, rmw=%d.' % (i, writes, reads, rmws))
-        # normalize by server region to account for latency differences
+        # Merge region stats
         for k, v in op_latencies.items():
-            if k in region_op_latencies:
-                region_op_latencies[k].append(v)
-            else:
-                region_op_latencies[k] = [v]
+            region_op_latencies.setdefault(k, []).append(v)
         for k, v in op_latency_counts.items():
             if k in region_op_latency_counts:
                 region_op_latency_counts[k] = min(region_op_latency_counts[k], v)
             else:
                 region_op_latency_counts[k] = v
 
-    # TODO: remove this hack
-    if 'fast_writes_0' in stats or 'slow_writes_0' in stats or 'fast_reads_0' in stats or 'slow_reads_0' in stats:
-        fw0 = stats['fast_writes_0'] if 'fast_writes_0' in stats else 0
-        sw0 = stats['slow_writes_0'] if 'slow_writes_0' in stats else 0
-        if fw0 + sw0 > 0:
-            stats['fast_write_ratio'] = fw0 / (fw0 + sw0)
-            stats['slow_write_ratio'] = sw0 / (fw0 + sw0)
-        fr0 = stats['fast_reads_0'] if 'fast_reads_0' in stats else 0
-        sr0 = stats['slow_reads_0'] if 'slow_reads_0' in stats else 0
-        if fr0 + sr0 > 0:
-            stats['fast_read_ratio'] = fr0 / (fr0 + sr0)
-            stats['slow_read_ratio'] = sr0 / (fr0 + sr0)
+    # # TODO: remove this hack
+    # if 'fast_writes_0' in stats or 'slow_writes_0' in stats or 'fast_reads_0' in stats or 'slow_reads_0' in stats:
+    #     fw0 = stats['fast_writes_0'] if 'fast_writes_0' in stats else 0
+    #     sw0 = stats['slow_writes_0'] if 'slow_writes_0' in stats else 0
+    #     if fw0 + sw0 > 0:
+    #         stats['fast_write_ratio'] = fw0 / (fw0 + sw0)
+    #         stats['slow_write_ratio'] = sw0 / (fw0 + sw0)
+    #     fr0 = stats['fast_reads_0'] if 'fast_reads_0' in stats else 0
+    #     sr0 = stats['slow_reads_0'] if 'slow_reads_0' in stats else 0
+    #     if fr0 + sr0 > 0:
+    #         stats['fast_read_ratio'] = fr0 / (fr0 + sr0)
+    #         stats['slow_read_ratio'] = sr0 / (fr0 + sr0)
 
-    total_committed = 0
-    total_attempts = 0
-    if 'new_order_committed' in stats:
-        total_committed += stats['new_order_committed']
-        total_attempts += stats['new_order_attempts']
-        stats['new_order_commit_rate'] = stats['new_order_committed'] / stats['new_order_attempts']
-        stats['new_order_abort_rate'] = 1 - stats['new_order_commit_rate'] 
-    if 'payment_committed' in stats:
-        total_committed += stats['payment_committed']
-        total_attempts += stats['payment_attempts']
-        stats['payment_commit_rate'] = stats['payment_committed'] / stats['payment_attempts']
-        stats['payment_abort_rate'] = 1 - stats['payment_commit_rate'] 
-    if 'order_status_committed' in stats:
-        total_committed += stats['order_status_committed']
-        total_attempts += stats['order_status_attempts']
-        stats['order_status_commit_rate'] = stats['order_status_committed'] / stats['order_status_attempts']
-        stats['order_status_abort_rate'] = 1 - stats['order_status_commit_rate'] 
-    if 'stock_level_committed' in stats:
-        total_committed += stats['stock_level_committed']
-        total_attempts += stats['stock_level_attempts']
-        stats['stock_level_commit_rate'] = stats['stock_level_committed'] / stats['stock_level_attempts']
-        stats['stock_level_abort_rate'] = 1 - stats['stock_level_commit_rate'] 
-    if 'delivery_committed' in stats:
-        total_committed += stats['delivery_committed']
-        total_attempts += stats['delivery_attempts']
-        stats['delivery_commit_rate'] = stats['delivery_committed'] / stats['delivery_attempts']
-        stats['delivery_abort_rate'] = 1 - stats['delivery_commit_rate'] 
-    if total_attempts > 0:
-        stats['committed'] = total_committed
-        stats['attempts'] = total_attempts
-        stats['commit_rate'] = total_committed / total_attempts
-        stats['abort_rate'] = 1 - stats['commit_rate']
+    # total_committed = 0
+    # total_attempts = 0
+    # if 'new_order_committed' in stats:
+    #     total_committed += stats['new_order_committed']
+    #     total_attempts += stats['new_order_attempts']
+    #     stats['new_order_commit_rate'] = stats['new_order_committed'] / stats['new_order_attempts']
+    #     stats['new_order_abort_rate'] = 1 - stats['new_order_commit_rate'] 
+    # if 'payment_committed' in stats:
+    #     total_committed += stats['payment_committed']
+    #     total_attempts += stats['payment_attempts']
+    #     stats['payment_commit_rate'] = stats['payment_committed'] / stats['payment_attempts']
+    #     stats['payment_abort_rate'] = 1 - stats['payment_commit_rate'] 
+    # if 'order_status_committed' in stats:
+    #     total_committed += stats['order_status_committed']
+    #     total_attempts += stats['order_status_attempts']
+    #     stats['order_status_commit_rate'] = stats['order_status_committed'] / stats['order_status_attempts']
+    #     stats['order_status_abort_rate'] = 1 - stats['order_status_commit_rate'] 
+    # if 'stock_level_committed' in stats:
+    #     total_committed += stats['stock_level_committed']
+    #     total_attempts += stats['stock_level_attempts']
+    #     stats['stock_level_commit_rate'] = stats['stock_level_committed'] / stats['stock_level_attempts']
+    #     stats['stock_level_abort_rate'] = 1 - stats['stock_level_commit_rate'] 
+    # if 'delivery_committed' in stats:
+    #     total_committed += stats['delivery_committed']
+    #     total_attempts += stats['delivery_attempts']
+    #     stats['delivery_commit_rate'] = stats['delivery_committed'] / stats['delivery_attempts']
+    #     stats['delivery_abort_rate'] = 1 - stats['delivery_commit_rate'] 
+    # if total_attempts > 0:
+    #     stats['committed'] = total_committed
+    #     stats['attempts'] = total_attempts
+    #     stats['commit_rate'] = total_committed / total_attempts
+    #     stats['abort_rate'] = 1 - stats['commit_rate']
 
     calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts)
     return stats, region_op_latencies, region_op_latency_counts 
@@ -258,22 +236,32 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
             stats['%s_norm' % op_type]['samples'] = len(norm_latencies)
 
 def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts):
-    total_recorded_time = float(config['client_experiment_length'] - config['client_ramp_up'] - config['client_ramp_down'])
+    total_recorded_time = float(config['client_experiment_length'] -
+                                config['client_ramp_up'] -
+                                config['client_ramp_down'])
 
-    for k, v in region_op_latencies.items():
-        latencies = [lat for region_lats in v for lat in region_lats]
-        
+    for op, region_lats_list in region_op_latencies.items():
+        total_latencies = sum((len(lats) for lats in region_lats_list))
+
+        # Process per region
+        for i, region_lats in enumerate(region_lats_list):
+            region_key = f'region-{i}'
+            if region_key not in stats:
+                stats[region_key] = {}
+
+            # Compute per-region stats
+            calculate_op_statistics(config, stats[region_key], total_recorded_time, op, region_lats, [])
+
+        # Compute combined statistics across regions
         norm_latencies = []
-        for region_lats in v:
-            norm_latencies += random.sample(region_lats, region_op_latency_counts[k])
+        for i, region_lats in enumerate(region_lats_list):
+            sample_count = min(region_op_latency_counts[op], len(region_lats))
+            if sample_count > 0:
+                norm_latencies += random.sample(region_lats, sample_count)
 
-        if not 'server_emulate_wan' in config or config['server_emulate_wan']:
-            for i in range(len(v)):
-                region_key = 'region-%d' % i
-                if region_key not in stats:
-                    stats[region_key] = {}
-                calculate_op_statistics(config, stats[region_key], total_recorded_time, k, v[i], [])
-        calculate_op_statistics(config, stats, total_recorded_time, k, latencies, norm_latencies)
+        # Aggregate across all regions
+        all_latencies = [lat for region_lats in region_lats_list for lat in region_lats]
+        calculate_op_statistics(config, stats, total_recorded_time, op, all_latencies, norm_latencies)
 
 
 def calculate_cdf_for_npdata(npdata):

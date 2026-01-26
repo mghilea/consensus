@@ -2,6 +2,7 @@ import json
 import time
 import concurrent.futures
 import os
+import shutil
 import sys
 import threading
 
@@ -450,10 +451,33 @@ def collect_and_calculate(config, client_config_idx, remote_exp_directory, local
     if is_exp_remote(config):
         collect_exp_data(config, remote_exp_directory, local_out_directory, executor)
 
-    stats, op_latencies = calculate_statistics(config, local_out_directory)
+    # Stream and aggregate logs immediately, deleting files after processing if debug mode is off
+    should_delete_files = 'client_debug_output' not in config or config['client_debug_output'] == False
+    stats, op_latencies = calculate_statistics(config, local_out_directory, delete_files=should_delete_files)
+
     generate_cdf_plots(config, local_out_directory, stats, executor)
     #generate_lot_plots(config, local_out_directory, stats, op_latencies, executor)
+
+    # Delete the contents of the local directory (except the stats.json file) if debug mode is off
+    if 'client_debug_output' not in config or config['client_debug_output'] == False:
+        clean_local_out_directory(local_out_directory)
+
     return local_out_directory
+
+def clean_local_out_directory(local_out_directory):
+    for root, dirs, files in os.walk(local_out_directory):
+        for name in files:
+            if name != "stats.json":
+                try:
+                    os.remove(os.path.join(root, name))
+                except OSError:
+                    pass
+        for name in dirs:
+            dir_path = os.path.join(root, name)
+            try:
+                shutil.rmtree(dir_path)
+            except OSError:
+                pass
 
 
 def get_arg_max():
