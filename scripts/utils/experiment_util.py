@@ -473,11 +473,12 @@ def clean_local_out_directory(local_out_directory):
                 except OSError:
                     pass
         for name in dirs:
-            dir_path = os.path.join(root, name)
-            try:
-                shutil.rmtree(dir_path)
-            except OSError:
-                pass
+            if name != "plots":
+                dir_path = os.path.join(root, name)
+                try:
+                    shutil.rmtree(dir_path)
+                except OSError:
+                    pass
 
 
 def get_arg_max():
