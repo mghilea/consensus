@@ -43,7 +43,7 @@
     ]
   ],
   "clients": [
-	  "client-4-9",
+	  "client-0-0",
     "client-0-1",
     "client-0-2",
     "client-0-3",
@@ -92,7 +92,7 @@
   "server_regions": {
     "virginia": [
       "us-east-1-0",
-      "client-4-9",
+      "client-0-0",
       "client-0-1",
       "client-0-2",
       "client-0-3",
@@ -245,7 +245,7 @@
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "rghilea-286547",
+  "experiment_name": "rghilea-287409",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,
