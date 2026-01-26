@@ -37,7 +37,7 @@ def calculate_statistics(config, local_out_directory, delete_files=True):
         stats_run, run_op_latencies, run_op_latency_counts = calculate_statistics_for_run(
             config, local_out_directory, i, delete_files=delete_files
         )
-        runs.append(stats)
+        runs.append(stats_run)
 
         # Merge op_latencies incrementally
         for k, v_list in run_op_latencies.items():
