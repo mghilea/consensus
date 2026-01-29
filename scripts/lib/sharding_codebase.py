@@ -31,23 +31,23 @@ class ShardingCodebase(ExperimentCodebase):
     def get_client_cmd(self, config, i, k, run, local_exp_directory, remote_exp_directory):
         client = config["clients"][i]
 
-        # if is_exp_local(config):
-        #     exp_directory = local_exp_directory
-        #     path_to_client_bin = os.path.join(config['src_directory'],
-        #                                       config['bin_directory_name'],
-        #                                       config['client_bin_name'])
-        #     stats_file = os.path.join(exp_directory,
-        #                               config['out_directory_name'], client,
-        #                               '%s-%d-stats-%d.json' % (client, k, run))
-        # else:
-        #     exp_directory = remote_exp_directory
-        #     path_to_client_bin = os.path.join(config['base_remote_bin_directory_nfs'],
-        #                                       config['bin_directory_name'],
-        #                                       config['client_bin_name'])
+        if is_exp_local(config):
+            exp_directory = local_exp_directory
+            path_to_client_bin = os.path.join(config['src_directory'],
+                                              config['bin_directory_name'],
+                                              config['client_bin_name'])
+            stats_file = os.path.join(exp_directory,
+                                      config['out_directory_name'], client,
+                                      '%s-%d-stats-%d.json' % (client, k, run))
+        else:
+            exp_directory = remote_exp_directory
+            path_to_client_bin = os.path.join(config['base_remote_bin_directory_nfs'],
+                                              config['bin_directory_name'],
+                                              config['client_bin_name'])
 
-        #     stats_file = os.path.join(exp_directory,
-        #                               config['out_directory_name'],
-        #                               '%s-%d-stats-%d.json' % (client, k, run))
+            stats_file = os.path.join(exp_directory,
+                                      config['out_directory_name'],
+                                      '%s-%d-stats-%d.json' % (client, k, run))
 
         coordinator_host = get_coordinator_host(config)
         coordinator_port = get_coordinator_port(config)
