@@ -166,7 +166,7 @@ class ShardingCodebase(ExperimentCodebase):
         #         client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
         #                                              stderr_file)
 
-        client_command = '(cd %s; %s) & ' % (exp_directory, client_command)
+        client_command = '(cd %s; %s) ' % (exp_directory, client_command)
         return client_command
 
 
