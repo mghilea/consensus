@@ -212,6 +212,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			break
 		case proposal := <-proposeChan:
 			//got a Propose from a client
+			dlog.Printf("Received client proposal for commandId %d at time %f\n", proposal.CommandId, time.Now().UnixNano())
 			r.handlePropose(proposal)
 			if r.batchingEnabled {
 				proposeChan = nil
@@ -703,6 +704,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 							inst.lb.clientProposals[i].CommandId,
 							state.NIL,
 							inst.lb.clientProposals[i].Timestamp}
+						dlog.Printf("Replying to client request after accept for commandId %d at timestamp %f\n", propreply.CommandId, time.Now().UnixNano())
 						r.ReplyProposeTS(propreply, inst.lb.clientProposals[i].Reply)
 					}
 				}
@@ -743,6 +745,7 @@ func (r *Replica) executeCommands() {
 							inst.lb.clientProposals[j].CommandId,
 							val,
 							inst.lb.clientProposals[j].Timestamp}
+						dlog.Printf("Replying to client request after execute for commandId %d at timestamp %f\n", propreply.CommandId, time.Now().UnixNano())
 						r.ReplyProposeTS(propreply, inst.lb.clientProposals[j].Reply)
 					}
 				}

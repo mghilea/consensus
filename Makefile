@@ -2,7 +2,7 @@ CURR_DIR = $(shell pwd)
 BIN_DIR = bin
 GO_BUILD = GO111MODULE=off GOPATH=$(CURR_DIR) GOBIN=$(CURR_DIR)/$(BIN_DIR) go install $@
 
-all: server master clientnew coordinator # lintest seqtest
+all: server master client-mt coordinator # lintest seqtest
 
 server:
 	$(GO_BUILD)
@@ -13,7 +13,7 @@ client:
 master:
 	$(GO_BUILD)
 
-clientnew:
+client-mt:
 	$(GO_BUILD)
 
 coordinator:

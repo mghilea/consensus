@@ -143,9 +143,7 @@ def wait_for_clients_to_terminate(config, client_ssh_threads):
     #time.sleep(config['client_experiment_length'] + 10)
 
 
-def start_clients(config, local_exp_directory, remote_exp_directory, run):
-    assert(config["client_total"] == (len(config["clients"])
-                                      * config["client_processes_per_client_node"]))
+def start_clients(config, local_exp_directory, remote_exp_directory, run, client_processes_per_client_node):
     client_processes = []
     for i in range(len(config["clients"])):
         client = config["clients"][i]
@@ -155,36 +153,17 @@ def start_clients(config, local_exp_directory, remote_exp_directory, run):
 
         client_host = get_client_host(config, client)
 
-        appended_client_commands = ""
-        for k in range(config["client_processes_per_client_node"]):
-            appended_client_commands += get_client_cmd(
-                config, i, k, run, local_exp_directory, remote_exp_directory)
+        client_command = get_client_cmd(
+            config, i, client_processes_per_client_node , run, local_exp_directory, remote_exp_directory)
 
-            if k != 0 and k % 128 == 0:
-                if appended_client_commands[-2:] == '& ':
-                    appended_client_commands = appended_client_commands[:-2]
-                if is_exp_remote(config):
-                    client_processes.append(run_remote_command_async(
-                        appended_client_commands + ' & wait',
-                        config['emulab_user'],
-                        client_host, False))
-                else:
-                    client_processes.append(run_local_command_async(
-                                                appended_client_commands + ' & wait'))
-                    print(appended_client_commands)
-                appended_client_commands = ''
-
-        if len(appended_client_commands) > 0:
-            if appended_client_commands[-2:] == '& ':
-                appended_client_commands = appended_client_commands[:-2]
-            if is_exp_remote(config):
+        if is_exp_remote(config):
                 client_processes.append(run_remote_command_async(
-                    appended_client_commands + ' & wait',
+                    client_command + ' & wait',
                     config['emulab_user'],
                     client_host, False))
-            else:
-                client_processes.append(run_local_command_async(
-                    appended_client_commands + ' & wait'))
+        else:
+            client_processes.append(run_local_command_async(
+                client_command + ' & wait'))
 
     return client_processes
 
@@ -452,14 +431,15 @@ def collect_and_calculate(config, client_config_idx, remote_exp_directory, local
         collect_exp_data(config, remote_exp_directory, local_out_directory, executor)
 
     # Stream and aggregate logs immediately, deleting files after processing if debug mode is off
-    should_delete_files = 'client_debug_output' not in config or config['client_debug_output'] == False
+    # should_delete_files = 'client_debug_output' not in config or config['client_debug_output'] == False
+    should_delete_files=False
     stats, op_latencies = calculate_statistics(config, local_out_directory, delete_files=should_delete_files)
 
     generate_cdf_plots(config, local_out_directory, stats, executor)
     #generate_lot_plots(config, local_out_directory, stats, op_latencies, executor)
 
     # Delete the contents of the local directory (except the stats.json file) if debug mode is off
-    if 'client_debug_output' not in config or config['client_debug_output'] == False:
+    if should_delete_files:
         clean_local_out_directory(local_out_directory)
 
     return local_out_directory
@@ -598,6 +578,9 @@ def run_experiment(config_file, client_config_idx, executor):
             remote_exp_directory = prepare_remote_exp_directories(config,
                                                                   local_exp_directory,
                                                                   executor)
+
+        assert(config["client_total"] == (len(config["clients"])
+                                      * config["client_processes_per_client_node"]))
         
         for i in range(config['num_experiment_runs']):
             kill_clients(config, executor)
@@ -609,13 +592,13 @@ def run_experiment(config_file, client_config_idx, executor):
                 if is_using_masters(config):
                     kill_masters(config, executor)
                     master_threads = start_masters(config, local_exp_directory,
-                                                   remote_exp_directory, i)
+                                                remote_exp_directory, i)
                 
                 kill_servers(config, executor)
                 time.sleep(2)
                 
                 server_threads = start_servers(config, local_exp_directory,
-                                               remote_exp_directory, i)
+                                            remote_exp_directory, i)
                 all_alive = True
                 for server_thread in server_threads:
                     if server_thread.poll() != None:
@@ -629,7 +612,7 @@ def run_experiment(config_file, client_config_idx, executor):
             #print("Waiting {} seconds for servers to finish setup".format(5))
             #time.sleep(5)
             client_threads = start_clients(config, local_exp_directory,
-                                           remote_exp_directory, i)
+                                        remote_exp_directory, i, config['client_processes_per_client_node'])
             wait_for_clients_to_terminate(config, client_threads)
             print("Waiting {} seconds for clients to finish".format(5))
             time.sleep(5)
@@ -643,8 +626,8 @@ def run_experiment(config_file, client_config_idx, executor):
                     master_thread.terminate()
                 kill_masters(config, executor)
         return executor.submit(collect_and_calculate, config,
-                               client_config_idx, remote_exp_directory, local_out_directory,
-                               executor)
+                            client_config_idx, remote_exp_directory, local_out_directory,
+                            executor)
 
 
 def run_multiple_experiments(config_file, executor):

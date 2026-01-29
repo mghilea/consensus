@@ -35,74 +35,26 @@
   "clients": [
 	  "client-0-0",
     "client-0-1",
-    "client-0-2",
-    "client-0-3",
-    "client-0-4",
-    "client-0-5",
-    "client-0-6",
-    "client-0-7",
-    "client-0-8",
-    "client-0-9",
 	  "client-1-0",
     "client-1-1",
-    "client-1-2",
-    "client-1-3",
-    "client-1-4",
-    "client-1-5",
-    "client-1-6",
-    "client-1-7",
-    "client-1-8",
-    "client-1-9",
     "client-2-0",
-    "client-2-1",
-    "client-2-2",
-    "client-2-3",
-    "client-2-4",
-    "client-2-5",
-    "client-2-6",
-    "client-2-7",
-    "client-2-8",
-    "client-2-9"
+    "client-2-1"
   ],
   "server_regions": {
     "virginia": [
       "us-east-1-0",
       "client-0-0",
-      "client-0-1",
-      "client-0-2",
-      "client-0-3",
-      "client-0-4",
-      "client-0-5",
-      "client-0-6",
-      "client-0-7",
-      "client-0-8",
-      "client-0-9"
+      "client-0-1"
     ],
     "california": [
       "us-west-1-0",
       "client-1-0",
-      "client-1-1",
-      "client-1-2",
-      "client-1-3",
-      "client-1-4",
-      "client-1-5",
-      "client-1-6",
-      "client-1-7",
-      "client-1-8",
-      "client-1-9"
+      "client-1-1"
     ],
     "ireland": [
       "eu-west-1-0",
       "client-2-0",
-      "client-2-1",
-      "client-2-2",
-      "client-2-3",
-      "client-2-4",
-      "client-2-5",
-      "client-2-6",
-      "client-2-7",
-      "client-2-8",
-      "client-2-9"
+      "client-2-1"
     ]
   },
   "region_rtt_latencies": {
@@ -123,13 +75,14 @@
       }
   },
   "client_total": [
-    [7680],
-    [7680]
+    [6, 12, 24, 48, 96, 192, 384, 768, 1536, 3072, 6144],
+    [6, 12, 24, 48, 96, 192, 384, 768, 1536, 3072, 6144]
   ],
   "client_processes_per_client_node": [
-    [256],
-    [256]
+    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],
+    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
   ],
+  "clientPoolSize": 1000,
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
   "client_write_percentage": 1000,
@@ -192,12 +145,12 @@
   "base_remote_bin_directory_nfs": "/users/rghilea/consensus",
   "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
-  "client_bin_name": "clientnew",
+  "client_bin_name": "client-mt",
   "client_debug_output": false,
   "client_experiment_length": 30,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
-  "client_max_processors": 2,
+  "client_max_processors": 16,
   "client_num_keys": 1000000,
   "client_ramp_down": 10,
   "client_ramp_up": 10,
@@ -205,7 +158,7 @@
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "rghilea-287409",
+  "experiment_name": "rghilea-289304",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,

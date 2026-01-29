@@ -52,8 +52,6 @@ class ShardingCodebase(ExperimentCodebase):
         coordinator_host = get_coordinator_host(config)
         coordinator_port = get_coordinator_port(config)
 
-        client_id = i * config['client_processes_per_client_node'] + k
-
         client_command = ""
 
         # client_command += (
@@ -70,12 +68,16 @@ class ShardingCodebase(ExperimentCodebase):
         if 'max_file_descriptors' in config:
             client_command += ' ulimit -n %d; ' % config['max_file_descriptors']
         
-        # Limit process to only use 'num_shards' cores
-        client_command += ' taskset -c 0-%d ' % (config['num_shards'] - 1)
+        # # Limit process to only use 'num_shards' cores
+        # client_command += ' taskset -c 0-%d ' % (config['num_shards'] - 1)
+
+        # client_command += 'GODEBUG=schedtrace=1000,scheddetail=1 '
 
         client_command += ' '.join([str(x) for x in [
             path_to_client_bin,
-            '-clientId', client_id,
+            '-clientId', i,
+            '-clientProcs', k,
+            '-clientPoolSize', config['clientPoolSize'],
             '-expLength', config['client_experiment_length'],
             '-caddr', coordinator_host,
             '-cport', coordinator_port,
@@ -167,7 +169,7 @@ class ShardingCodebase(ExperimentCodebase):
                 client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
                                                      stderr_file)
 
-        client_command = '(cd %s; %s) & ' % (exp_directory, client_command)
+        client_command = '(cd %s; %s) ' % (exp_directory, client_command)
         return client_command
 
 
