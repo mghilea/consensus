@@ -34,75 +34,21 @@
   ],
   "clients": [
 	  "client-0-0",
-    "client-0-1",
-    "client-0-2",
-    "client-0-3",
-    "client-0-4",
-    "client-0-5",
-    "client-0-6",
-    "client-0-7",
-    "client-0-8",
-    "client-0-9",
 	  "client-1-0",
-    "client-1-1",
-    "client-1-2",
-    "client-1-3",
-    "client-1-4",
-    "client-1-5",
-    "client-1-6",
-    "client-1-7",
-    "client-1-8",
-    "client-1-9",
-    "client-2-0",
-    "client-2-1",
-    "client-2-2",
-    "client-2-3",
-    "client-2-4",
-    "client-2-5",
-    "client-2-6",
-    "client-2-7",
-    "client-2-8",
-    "client-2-9"
+    "client-2-0"
   ],
   "server_regions": {
     "virginia": [
       "us-east-1-0",
-      "client-0-0",
-      "client-0-1",
-      "client-0-2",
-      "client-0-3",
-      "client-0-4",
-      "client-0-5",
-      "client-0-6",
-      "client-0-7",
-      "client-0-8",
-      "client-0-9"
+      "client-0-0"
     ],
     "california": [
       "us-west-1-0",
-      "client-1-0",
-      "client-1-1",
-      "client-1-2",
-      "client-1-3",
-      "client-1-4",
-      "client-1-5",
-      "client-1-6",
-      "client-1-7",
-      "client-1-8",
-      "client-1-9"
+      "client-1-0"
     ],
     "ireland": [
       "eu-west-1-0",
-      "client-2-0",
-      "client-2-1",
-      "client-2-2",
-      "client-2-3",
-      "client-2-4",
-      "client-2-5",
-      "client-2-6",
-      "client-2-7",
-      "client-2-8",
-      "client-2-9"
+      "client-2-0"
     ]
   },
   "region_rtt_latencies": {
@@ -123,12 +69,12 @@
       }
   },
   "client_total": [
-    [7680],
-    [7680]
+    [6],
+    [6]
   ],
   "client_processes_per_client_node": [
-    [256],
-    [256]
+    [2],
+    [2]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -193,7 +139,7 @@
   "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
-  "client_debug_output": false,
+  "client_debug_output": true,
   "client_experiment_length": 30,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
@@ -222,7 +168,7 @@
   "server_bin_name": "server",
   "server_cpuprofile": false,
   "server_blockprofile": false,
-  "server_debug_output": false,
+  "server_debug_output": true,
   "server_durable": false,
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,

@@ -31,28 +31,26 @@ class ShardingCodebase(ExperimentCodebase):
     def get_client_cmd(self, config, i, k, run, local_exp_directory, remote_exp_directory):
         client = config["clients"][i]
 
-        if is_exp_local(config):
-            exp_directory = local_exp_directory
-            path_to_client_bin = os.path.join(config['src_directory'],
-                                              config['bin_directory_name'],
-                                              config['client_bin_name'])
-            stats_file = os.path.join(exp_directory,
-                                      config['out_directory_name'], client,
-                                      '%s-%d-stats-%d.json' % (client, k, run))
-        else:
-            exp_directory = remote_exp_directory
-            path_to_client_bin = os.path.join(config['base_remote_bin_directory_nfs'],
-                                              config['bin_directory_name'],
-                                              config['client_bin_name'])
+        # if is_exp_local(config):
+        #     exp_directory = local_exp_directory
+        #     path_to_client_bin = os.path.join(config['src_directory'],
+        #                                       config['bin_directory_name'],
+        #                                       config['client_bin_name'])
+        #     stats_file = os.path.join(exp_directory,
+        #                               config['out_directory_name'], client,
+        #                               '%s-%d-stats-%d.json' % (client, k, run))
+        # else:
+        #     exp_directory = remote_exp_directory
+        #     path_to_client_bin = os.path.join(config['base_remote_bin_directory_nfs'],
+        #                                       config['bin_directory_name'],
+        #                                       config['client_bin_name'])
 
-            stats_file = os.path.join(exp_directory,
-                                      config['out_directory_name'],
-                                      '%s-%d-stats-%d.json' % (client, k, run))
+        #     stats_file = os.path.join(exp_directory,
+        #                               config['out_directory_name'],
+        #                               '%s-%d-stats-%d.json' % (client, k, run))
 
         coordinator_host = get_coordinator_host(config)
         coordinator_port = get_coordinator_port(config)
-
-        client_id = i * config['client_processes_per_client_node'] + k
 
         client_command = ""
 
@@ -75,7 +73,8 @@ class ShardingCodebase(ExperimentCodebase):
 
         client_command += ' '.join([str(x) for x in [
             path_to_client_bin,
-            '-clientId', client_id,
+            '-clientId', i,
+            '-clientProcs', k,
             '-expLength', config['client_experiment_length'],
             '-caddr', coordinator_host,
             '-cport', coordinator_port,
@@ -142,30 +141,30 @@ class ShardingCodebase(ExperimentCodebase):
             else:
                 client_command = 'setenv GOGC off; %s' % client_command
 
-        if is_exp_local(config):
-            stdout_file = os.path.join(exp_directory,
-                                       config['out_directory_name'],
-                                       client,
-                                       '%s-%d-stdout-%d.log' % (client, k, run))
-            stderr_file = os.path.join(exp_directory,
-                                       config['out_directory_name'],
-                                       client,
-                                       '%s-%d-stderr-%d.log' % (client, k, run))
-            client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
-                                                 stderr_file)
-        else:
-            stdout_file = os.path.join(exp_directory,
-                                       config['out_directory_name'],
-                                       '%s-%d-stdout-%d.log' % (client, k, run))
-            stderr_file = os.path.join(exp_directory,
-                                       config['out_directory_name'],
-                                       '%s-%d-stderr-%d.log' % (client, k, run))
-            if is_using_tcsh(config):
-                client_command = tcsh_redirect_output_to_files(client_command,
-                                                               stdout_file, stderr_file)
-            else:
-                client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
-                                                     stderr_file)
+        # if is_exp_local(config):
+        #     stdout_file = os.path.join(exp_directory,
+        #                                config['out_directory_name'],
+        #                                client,
+        #                                '%s-%d-stdout-%d.log' % (client, k, run))
+        #     stderr_file = os.path.join(exp_directory,
+        #                                config['out_directory_name'],
+        #                                client,
+        #                                '%s-%d-stderr-%d.log' % (client, k, run))
+        #     client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
+        #                                          stderr_file)
+        # else:
+        #     stdout_file = os.path.join(exp_directory,
+        #                                config['out_directory_name'],
+        #                                '%s-%d-stdout-%d.log' % (client, k, run))
+        #     stderr_file = os.path.join(exp_directory,
+        #                                config['out_directory_name'],
+        #                                '%s-%d-stderr-%d.log' % (client, k, run))
+        #     if is_using_tcsh(config):
+        #         client_command = tcsh_redirect_output_to_files(client_command,
+        #                                                        stdout_file, stderr_file)
+        #     else:
+        #         client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
+        #                                              stderr_file)
 
         client_command = '(cd %s; %s) & ' % (exp_directory, client_command)
         return client_command

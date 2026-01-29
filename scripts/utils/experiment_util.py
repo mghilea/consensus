@@ -143,9 +143,7 @@ def wait_for_clients_to_terminate(config, client_ssh_threads):
     #time.sleep(config['client_experiment_length'] + 10)
 
 
-def start_clients(config, local_exp_directory, remote_exp_directory, run):
-    assert(config["client_total"] == (len(config["clients"])
-                                      * config["client_processes_per_client_node"]))
+def start_clients(config, local_exp_directory, remote_exp_directory, run, client_processes_per_client_node):
     client_processes = []
     for i in range(len(config["clients"])):
         client = config["clients"][i]
@@ -155,36 +153,17 @@ def start_clients(config, local_exp_directory, remote_exp_directory, run):
 
         client_host = get_client_host(config, client)
 
-        appended_client_commands = ""
-        for k in range(config["client_processes_per_client_node"]):
-            appended_client_commands += get_client_cmd(
-                config, i, k, run, local_exp_directory, remote_exp_directory)
+        client_command = get_client_cmd(
+            config, i, client_processes_per_client_node , run, local_exp_directory, remote_exp_directory)
 
-            if k != 0 and k % 128 == 0:
-                if appended_client_commands[-2:] == '& ':
-                    appended_client_commands = appended_client_commands[:-2]
-                if is_exp_remote(config):
-                    client_processes.append(run_remote_command_async(
-                        appended_client_commands + ' & wait',
-                        config['emulab_user'],
-                        client_host, False))
-                else:
-                    client_processes.append(run_local_command_async(
-                                                appended_client_commands + ' & wait'))
-                    print(appended_client_commands)
-                appended_client_commands = ''
-
-        if len(appended_client_commands) > 0:
-            if appended_client_commands[-2:] == '& ':
-                appended_client_commands = appended_client_commands[:-2]
-            if is_exp_remote(config):
+        if is_exp_remote(config):
                 client_processes.append(run_remote_command_async(
-                    appended_client_commands + ' & wait',
+                    client_command + ' & wait',
                     config['emulab_user'],
                     client_host, False))
-            else:
-                client_processes.append(run_local_command_async(
-                    appended_client_commands + ' & wait'))
+        else:
+            client_processes.append(run_local_command_async(
+                client_command + ' & wait'))
 
     return client_processes
 
@@ -598,53 +577,57 @@ def run_experiment(config_file, client_config_idx, executor):
             remote_exp_directory = prepare_remote_exp_directories(config,
                                                                   local_exp_directory,
                                                                   executor)
+
+        assert(config["client_total"] == (len(config["clients"])
+                                      * config["client_processes_per_client_node"]))
         
         for i in range(config['num_experiment_runs']):
-            kill_clients(config, executor)
-            servers_alive = False
-            retries = 0
-            master_threads = None
-            server_threads = None
-            while not servers_alive and retries <= config['max_retries']:
-                if is_using_masters(config):
-                    kill_masters(config, executor)
-                    master_threads = start_masters(config, local_exp_directory,
-                                                   remote_exp_directory, i)
-                
-                kill_servers(config, executor)
-                time.sleep(2)
-                
-                server_threads = start_servers(config, local_exp_directory,
-                                               remote_exp_directory, i)
-                all_alive = True
+            for k in range(config['client_processes_per_client_node']):
+                kill_clients(config, executor)
+                servers_alive = False
+                retries = 0
+                master_threads = None
+                server_threads = None
+                while not servers_alive and retries <= config['max_retries']:
+                    if is_using_masters(config):
+                        kill_masters(config, executor)
+                        master_threads = start_masters(config, local_exp_directory,
+                                                    remote_exp_directory, i)
+                    
+                    kill_servers(config, executor)
+                    time.sleep(2)
+                    
+                    server_threads = start_servers(config, local_exp_directory,
+                                                remote_exp_directory, i)
+                    all_alive = True
+                    for server_thread in server_threads:
+                        if server_thread.poll() != None:
+                            all_alive = False
+                            break
+                    servers_alive = all_alive
+                    retries += 1
+                if not servers_alive:
+                    sys.stderr.write('Failed to start all servers.\n')
+                    raise
+                #print("Waiting {} seconds for servers to finish setup".format(5))
+                #time.sleep(5)
+                client_threads = start_clients(config, local_exp_directory,
+                                            remote_exp_directory, i, k)
+                wait_for_clients_to_terminate(config, client_threads)
+                print("Waiting {} seconds for clients to finish".format(5))
+                time.sleep(5)
+                kill_clients(config, executor)
+                time.sleep(1)
                 for server_thread in server_threads:
-                    if server_thread.poll() != None:
-                        all_alive = False
-                        break
-                servers_alive = all_alive
-                retries += 1
-            if not servers_alive:
-                sys.stderr.write('Failed to start all servers.\n')
-                raise
-            #print("Waiting {} seconds for servers to finish setup".format(5))
-            #time.sleep(5)
-            client_threads = start_clients(config, local_exp_directory,
-                                           remote_exp_directory, i)
-            wait_for_clients_to_terminate(config, client_threads)
-            print("Waiting {} seconds for clients to finish".format(5))
-            time.sleep(5)
-            kill_clients(config, executor)
-            time.sleep(1)
-            for server_thread in server_threads:
-                server_thread.terminate()
-            kill_servers(config, executor, '-15')
-            if is_using_masters(config):
-                for master_thread in master_threads:
-                    master_thread.terminate()
-                kill_masters(config, executor)
-        return executor.submit(collect_and_calculate, config,
-                               client_config_idx, remote_exp_directory, local_out_directory,
-                               executor)
+                    server_thread.terminate()
+                kill_servers(config, executor, '-15')
+                if is_using_masters(config):
+                    for master_thread in master_threads:
+                        master_thread.terminate()
+                    kill_masters(config, executor)
+            return executor.submit(collect_and_calculate, config,
+                                client_config_idx, remote_exp_directory, local_out_directory,
+                                executor)
 
 
 def run_multiple_experiments(config_file, executor):
