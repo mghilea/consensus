@@ -141,30 +141,30 @@ class ShardingCodebase(ExperimentCodebase):
             else:
                 client_command = 'setenv GOGC off; %s' % client_command
 
-        # if is_exp_local(config):
-        #     stdout_file = os.path.join(exp_directory,
-        #                                config['out_directory_name'],
-        #                                client,
-        #                                '%s-%d-stdout-%d.log' % (client, k, run))
-        #     stderr_file = os.path.join(exp_directory,
-        #                                config['out_directory_name'],
-        #                                client,
-        #                                '%s-%d-stderr-%d.log' % (client, k, run))
-        #     client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
-        #                                          stderr_file)
-        # else:
-        #     stdout_file = os.path.join(exp_directory,
-        #                                config['out_directory_name'],
-        #                                '%s-%d-stdout-%d.log' % (client, k, run))
-        #     stderr_file = os.path.join(exp_directory,
-        #                                config['out_directory_name'],
-        #                                '%s-%d-stderr-%d.log' % (client, k, run))
-        #     if is_using_tcsh(config):
-        #         client_command = tcsh_redirect_output_to_files(client_command,
-        #                                                        stdout_file, stderr_file)
-        #     else:
-        #         client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
-        #                                              stderr_file)
+        if is_exp_local(config):
+            stdout_file = os.path.join(exp_directory,
+                                       config['out_directory_name'],
+                                       client,
+                                       '%s-%d-stdout-%d.log' % (client, k, run))
+            stderr_file = os.path.join(exp_directory,
+                                       config['out_directory_name'],
+                                       client,
+                                       '%s-%d-stderr-%d.log' % (client, k, run))
+            client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
+                                                 stderr_file)
+        else:
+            stdout_file = os.path.join(exp_directory,
+                                       config['out_directory_name'],
+                                       '%s-%d-stdout-%d.log' % (client, k, run))
+            stderr_file = os.path.join(exp_directory,
+                                       config['out_directory_name'],
+                                       '%s-%d-stderr-%d.log' % (client, k, run))
+            if is_using_tcsh(config):
+                client_command = tcsh_redirect_output_to_files(client_command,
+                                                               stdout_file, stderr_file)
+            else:
+                client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
+                                                     stderr_file)
 
         client_command = '(cd %s; %s) ' % (exp_directory, client_command)
         return client_command
