@@ -3,7 +3,6 @@ package clients
 import (
 	"clientproto"
 	"fastrpc"
-	"fmt"
 	"genericsmr"
 	"genericsmrproto"
 	"state"
@@ -43,7 +42,7 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (boo
 		k := keys[i]
 
 		before := time.Now()
-		var opTypeStr string
+		// var opTypeStr string
 		var success bool
 		if opType == state.GET {
 			opTypeStr = "read"
@@ -57,11 +56,10 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (boo
 		}
 		after := time.Now()
 
-		if success {
-			lat := after.Sub(before).Nanoseconds()
-			// fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
-		} else {
+		if !success {
 			return false, -1
+			// lat := after.Sub(before).Nanoseconds()
+			// fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
 		}
 	}
 
