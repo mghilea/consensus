@@ -179,6 +179,13 @@ var zipfV = flag.Float64(
 	"Zipfian v parameter. Generates values k∈ [0, numKeys] such that P(k) is "+
 		"proportional to (v + k) ** (-s)")
 
+type Result struct {
+	op   string
+	lat  int64
+	key  int32
+	cnt  int32
+}
+
 func createClientWithID(uniqueID int32) clients.Client {
 	switch *replProtocol {
 	case "abd":
@@ -211,7 +218,7 @@ func Max(a int64, b int64) int64 {
 	}
 }
 
-func closedLoopClient(uniqueID int32, stop <-chan struct{}, wg *sync.WaitGroup) {
+func closedLoopClient(uniqueID int32, stop <-chan struct{}, results chan<- Result, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	r := rand.New(rand.NewSource(int64(uniqueID)))
@@ -224,14 +231,14 @@ func closedLoopClient(uniqueID int32, stop <-chan struct{}, wg *sync.WaitGroup) 
 	count := int32(0)
 
 	start := time.Now()
-	currRuntime := time.Since(start)
 
 	for {
 		select {
 		case <-stop:
 			client.Finish()
+			elapsed := time.Since(start)
 			log.Printf("Total AppRequests attempted: %d, total system level requests: %d\n", count, count*int32(*fanout))
-			log.Printf("Experiment over after %f seconds\n", int(currRuntime.Seconds()))
+			log.Printf("Experiment over after %f seconds\n", int(elapsed.Seconds()))
 			return
 		default:
 		}
@@ -240,9 +247,9 @@ func closedLoopClient(uniqueID int32, stop <-chan struct{}, wg *sync.WaitGroup) 
 			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
 		}
 
-		var opTypes []state.Operation
+		opTypes := make([]state.Operation, *fanout)
+		keys := make([]int64, *fanout)
 		var k int64
-		var keys []int64
 
 		for i := 0; i < *fanout; i++ {
 			roll := r.Intn(1000)
@@ -254,7 +261,7 @@ func closedLoopClient(uniqueID int32, stop <-chan struct{}, wg *sync.WaitGroup) 
 			} else {
 				op = state.CAS
 			}
-			opTypes = append(opTypes, op)
+			opTypes[i] = op
 
 			if *conflicts >= 0 {
 				if r.Intn(*conflictsDenom) < *conflicts {
@@ -265,11 +272,11 @@ func closedLoopClient(uniqueID int32, stop <-chan struct{}, wg *sync.WaitGroup) 
 			} else {
 				k = int64(zipf.Uint64())
 			}
-			keys = append(keys, k)
+			keys[i] = k
 		}
 
 		var success bool
-		
+
 		before := time.Now()
 		success, _ = client.AppRequest(opTypes, keys)
 		after := time.Now()
@@ -285,8 +292,7 @@ func closedLoopClient(uniqueID int32, stop <-chan struct{}, wg *sync.WaitGroup) 
 
 		if *rampUp <= currInt && currInt < *expLength-*rampDown {
 			lat := int64(after.Sub(before).Nanoseconds())
-			fmt.Printf("%s,%d,%d,%d\n", opString, lat, k, count)
-
+			results <- Result{opString, lat, uniqueID, count}
 		}
 	}
 }
@@ -314,9 +320,20 @@ func main() {
 	var wg sync.WaitGroup
 	nextID := int32(*clientId * 1000000)
 
+	results := make(chan Result, 1000000)
+	var loggerWg sync.WaitGroup
+	loggerWg.Add(1)
+
+	go func() {
+		defer loggerWg.Done()
+		for r := range results {
+			fmt.Printf("%s,%d,%d,%d\n", r.op, r.lat, r.key, r.cnt)
+		}
+	}()
+
 	for i := 0; i < *clientProcs; i++ {
 		wg.Add(1)
-		go closedLoopClient(nextID, stop, &wg)
+		go closedLoopClient(nextID, stop, results, &wg)
 		nextID++
 	}
 
@@ -324,4 +341,6 @@ func main() {
 	time.Sleep(time.Duration(*expLength) * time.Second)
 	close(stop)
 	wg.Wait()
+	close(results)
+	loggerWg.Wait()
 }
