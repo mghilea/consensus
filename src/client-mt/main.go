@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"os"
-	"os/signal"
 	"runtime"
-	"runtime/pprof"
 	"state"
+	"sync"
 	"time"
   "zipfgenerator"
 )
@@ -23,7 +21,7 @@ var clientId *int = flag.Int(
 
 var clientProcs *int = flag.Int(
 	"clientProcs",
-	0,
+	1,
 	"Number of client processed running on this client.")
 
 var conflicts *int = flag.Int(
@@ -184,23 +182,23 @@ var zipfV = flag.Float64(
 func createClientWithID(uniqueID int32) clients.Client {
 	switch *replProtocol {
 	case "abd":
-		return clients.NewAbdClient(int32(*uniqueID), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewAbdClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, *regular)
 	case "gryff":
-		return clients.NewGryffClient(int32(*uniqueID), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewGryffClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, *regular, *sequential, *proxy, *thrifty, *defaultReplicaOrder,
 			*epaxosMode)
 	case "epaxos":
-		return clients.NewProposeClient(int32(*uniqueID), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true)
 	case "mdl":
-		return clients.NewMDLClient(int32(*uniqueID), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewMDLClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true, *singleShardAware)
 	case "ss-mdl":
-		return clients.NewSSMDLClient(int32(*uniqueID), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewSSMDLClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, false)
 	default:
-		return clients.NewProposeClient(int32(*uniqueID), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, false)
 	}
 }
@@ -226,14 +224,14 @@ func closedLoopClient(uniqueID int32, stop <-chan struct{}, wg *sync.WaitGroup) 
 	count := int32(0)
 
 	start := time.Now()
-	var currRuntime time.Time
+	currRuntime := time.Since(start)
 
 	for {
 		select {
 		case <-stop:
 			client.Finish()
 			log.Printf("Total AppRequests attempted: %d, total system level requests: %d\n", count, count*int32(*fanout))
-			log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
+			log.Printf("Experiment over after %f seconds\n", int(currRuntime.Seconds()))
 			return
 		default:
 		}
@@ -270,6 +268,8 @@ func closedLoopClient(uniqueID int32, stop <-chan struct{}, wg *sync.WaitGroup) 
 			keys = append(keys, k)
 		}
 
+		var success bool
+		
 		before := time.Now()
 		success, _ = client.AppRequest(opTypes, keys)
 		after := time.Now()
@@ -314,7 +314,7 @@ func main() {
 	var wg sync.WaitGroup
 	nextID := int32(*clientId * 1000000)
 
-	for i := 0; i < *clientsTotal; i++ {
+	for i := 0; i < *clientProcs; i++ {
 		wg.Add(1)
 		go closedLoopClient(nextID, stop, &wg)
 		nextID++
