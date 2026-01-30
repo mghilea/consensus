@@ -237,7 +237,7 @@
   "client_experiment_length": 30,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
-  "client_max_processors": 2,
+  "client_max_processors": 16,
   "client_num_keys": 1000000,
   "client_ramp_down": 10,
   "client_ramp_up": 10,

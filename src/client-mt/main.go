@@ -186,6 +186,11 @@ type Result struct {
 	cnt  int32
 }
 
+type ClientJob struct {
+	client clients.Client
+	id     int32
+}
+
 func createClientWithID(uniqueID int32) clients.Client {
 	switch *replProtocol {
 	case "abd":
@@ -218,92 +223,95 @@ func Max(a int64, b int64) int64 {
 	}
 }
 
-func closedLoopClient(uniqueID int32, stop <-chan struct{}, results chan<- Result, wg *sync.WaitGroup) {
+func clientWorkerAsync(startID int32, nClients int, stop <-chan struct{}, results chan<- Result, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	r := rand.New(rand.NewSource(int64(uniqueID)))
-	zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
-	if err != nil {
-		panic("problem making the zipfian generator :0")
+	clientCh := make(chan ClientJob, nClients)
+
+	// Initialize clients
+	for i := 0; i < nClients; i++ {
+		c := createClientWithID(startID + int32(i))
+		clientCh <- ClientJob{c, startID + int32(i)}
 	}
-	
-	client := createClientWithID(uniqueID)
-	count := int32(0)
 
 	start := time.Now()
 
 	for {
 		select {
 		case <-stop:
-			client.Finish()
+			// Finish all clients
+			close(clientCh)
+			for job := range clientCh {
+				job.client.Finish()
+			}
 			elapsed := time.Since(start)
-			log.Printf("Total AppRequests attempted: %d, total system level requests: %d\n", count, count*int32(*fanout))
 			log.Printf("Experiment over after %.2f seconds\n", elapsed.Seconds())
 			return
-		default:
-		}
-
-		if *randSleep > 0 {
-			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
-		}
-
-		opTypes := make([]state.Operation, *fanout)
-		keys := make([]int64, *fanout)
-		var k int64
-
-		for i := 0; i < *fanout; i++ {
-			roll := r.Intn(1000)
-			var op state.Operation
-			if roll < *reads {
-				op = state.GET
-			} else if roll < *reads+*writes {
-				op = state.PUT
-			} else {
-				op = state.CAS
-			}
-			opTypes[i] = op
-
-			if *conflicts >= 0 {
-				if r.Intn(*conflictsDenom) < *conflicts {
-					k = 0
-				} else {
-					k = (int64(count) << 32) | int64(uniqueID)
+		case job := <-clientCh:
+			// Next client that is ready will fire an app request
+			go func(j ClientJob) {
+				if *randSleep > 0 {
+					time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
 				}
-			} else {
-				k = int64(zipf.Uint64())
-			}
-			keys[i] = k
-		}
+				randSrc := rand.New(rand.NewSource(int64(startID)))
+				zipfGen, _ := zipfgenerator.NewZipfGenerator(randSrc, 0, *numKeys, *zipfS, false)
 
-		var success bool
+				opTypes := make([]state.Operation, *fanout)
+				keys := make([]int64, *fanout)
+				var k int64
 
-		before := time.Now()
-		success, _ = client.AppRequest(opTypes, keys)
-		after := time.Now()
+				for i := 0; i < *fanout; i++ {
+					roll := randSrc.Intn(1000)
+					if roll < *reads {
+						opTypes[i] = state.GET
+					} else if roll < *reads+*writes {
+						opTypes[i] = state.PUT
+					} else {
+						opTypes[i] = state.CAS
+					}
 
-		opString := "app"
-		if !success {
-			log.Printf("Failed %s(%d).\n", opString, count)
-		}
-		count++
+					if *conflicts >= 0 && randSrc.Intn(*conflictsDenom) < *conflicts {
+						k = 0
+					} else {
+						k = int64(zipfGen.Uint64())
+					}
+					keys[i] = k
+				}
 
-		currRuntime := time.Since(start)
-    	currInt := int(currRuntime.Seconds())
+				before := time.Now()
+				success, _ := j.client.AppRequest(opTypes, keys)
+				after := time.Now()
 
-		if *rampUp <= currInt && currInt < *expLength-*rampDown {
-			lat := int64(after.Sub(before).Nanoseconds())
-			results <- Result{opString, lat, uniqueID, count}
+				opString := "app"
+				currRuntime := time.Since(start)
+				currInt := int(currRuntime.Seconds())
+
+				if *rampUp <= currInt && currInt < *expLength-*rampDown {
+					lat := int64(after.Sub(before).Nanoseconds())
+					results <- Result{opString, lat, uniqueID, count}
+				}
+
+				// Mark client as ready to fire next request
+				select {
+				case clientCh <- j:
+				case <-stop:
+					j.client.Finish()
+				}
+			}(job)
 		}
 	}
 }
 
 func main() {
 	flag.Parse()
+	var workers int
 
 	if *maxProcessors > 0 {
 		runtime.GOMAXPROCS(*maxProcessors)
+		workers = *maxProcessors
 	} else {
 		runtime.GOMAXPROCS(runtime.NumCPU())
+		workers = runtime.NumCPU()
 	}
 
 	if *conflicts >= 0 {
@@ -318,7 +326,6 @@ func main() {
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-	nextID := int32(*clientId * 1000000)
 
 	results := make(chan Result, 1000000)
 	var loggerWg sync.WaitGroup
@@ -331,10 +338,18 @@ func main() {
 		}
 	}()
 
-	for i := 0; i < *clientProcs; i++ {
+	clientsPerWorker := clientProcs / workers
+    extra := clientProcs % workers
+	nextID := int32(*clientId * 1000000)
+
+	for i := 0; i < workers; i++ {
+		nClients := clientsPerWorker
+        if i < extra {
+            nClients++
+        }
 		wg.Add(1)
-		go closedLoopClient(nextID, stop, results, &wg)
-		nextID++
+		go clientWorkerAsync(nextID, nClients, stop, results, &wg)
+        nextID += int32(nClients)
 	}
 
 	// Run for expLength seconds
