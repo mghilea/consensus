@@ -107,42 +107,43 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
 
             client_dir = os.path.join(local_out_directory, client)
 
-            for k in range(config["client_processes_per_client_node"]):
-                # Process stdout log
-                client_out_file = os.path.join(client_dir, f"{client}-{k}-stdout-{run}.log")
+            k = config["client_processes_per_client_node"]
+            
+            # Process stdout log
+            client_out_file = os.path.join(client_dir, f"{client}-{k}-stdout-{run}.log")
 
-                if os.path.exists(client_out_file):
-                    with open(client_out_file) as f:
-                        for line in f:
-                            opCols = line.strip().split(',')
-                            for x in range(0, len(opCols), 2):
-                                op = opCols[x]
-                                if op.isdigit() or op in blacklist:
-                                    continue
-                                opVal = float(opCols[x+1]) / input_scale * output_scale
-                                op_latencies[op].append(opVal)
-                                op_latency_counts[op] += 1
-                                if op not in combine_blacklist:
-                                    op_latencies['combined'].append(opVal)
-                                    op_latency_counts['combined'] += 1
+            if os.path.exists(client_out_file):
+                with open(client_out_file) as f:
+                    for line in f:
+                        opCols = line.strip().split(',')
+                        for x in range(0, len(opCols), 2):
+                            op = opCols[x]
+                            if op.isdigit() or op in blacklist:
+                                continue
+                            opVal = float(opCols[x+1]) / input_scale * output_scale
+                            op_latencies[op].append(opVal)
+                            op_latency_counts[op] += 1
+                            if op not in combine_blacklist:
+                                op_latencies['combined'].append(opVal)
+                                op_latency_counts['combined'] += 1
 
-                    # Remove file that was just processed if debug mode is off                
-                    if delete_files:
-                        os.remove(client_out_file)
+                # Remove file that was just processed if debug mode is off                
+                if delete_files:
+                    os.remove(client_out_file)
 
-                # Process client stats JSON
-                client_stats_file = os.path.join(client_dir, f"{client}-{k}-stats-{run}.json")
-                if os.path.exists(client_stats_file):
-                    try:
-                        with open(client_stats_file) as f:
-                            client_stats = json.load(f)
-                            for k, v in client_stats.items():
-                                if isinstance(v, (int, float)):
-                                    stats[k] = stats.get(k, 0) + v
-                    except json.JSONDecodeError:
-                        print(f"Invalid JSON file {client_stats_file}")
-                    if delete_files:
-                        os.remove(client_stats_file)
+            # Process client stats JSON
+            client_stats_file = os.path.join(client_dir, f"{client}-{k}-stats-{run}.json")
+            if os.path.exists(client_stats_file):
+                try:
+                    with open(client_stats_file) as f:
+                        client_stats = json.load(f)
+                        for k, v in client_stats.items():
+                            if isinstance(v, (int, float)):
+                                stats[k] = stats.get(k, 0) + v
+                except json.JSONDecodeError:
+                    print(f"Invalid JSON file {client_stats_file}")
+                if delete_files:
+                    os.remove(client_stats_file)
 
         # Process server stats
         for shard_idx, shard in enumerate(config["shards"]):
