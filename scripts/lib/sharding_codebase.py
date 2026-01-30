@@ -68,8 +68,8 @@ class ShardingCodebase(ExperimentCodebase):
         if 'max_file_descriptors' in config:
             client_command += ' ulimit -n %d; ' % config['max_file_descriptors']
         
-        # Limit process to only use 'num_shards' cores
-        client_command += ' taskset -c 0-%d ' % (config['num_shards'] - 1)
+        # # Limit process to only use 'num_shards' cores
+        # client_command += ' taskset -c 0-%d ' % (config['num_shards'] - 1)
 
         client_command += ' '.join([str(x) for x in [
             path_to_client_bin,
