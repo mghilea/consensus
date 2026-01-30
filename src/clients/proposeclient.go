@@ -6,7 +6,6 @@ import (
 	"genericsmr"
 	"genericsmrproto"
 	"state"
-	"time"
 )
 
 type ProposeClient struct {
@@ -41,20 +40,20 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (boo
 	for i, opType := range opTypes {
 		k := keys[i]
 
-		before := time.Now()
+		// before := time.Now()
 		// var opTypeStr string
 		var success bool
 		if opType == state.GET {
-			opTypeStr = "read"
+			// opTypeStr = "read"
 			success, _ = c.Read(k)
 		} else if opType == state.PUT {
-			opTypeStr = "write"
+			// opTypeStr = "write"
 			success = c.Write(k, int64(k))
 		} else {
-			opTypeStr = "rmw"
+			// opTypeStr = "rmw"
 			success, _ = c.CompareAndSwap(k, int64(k-1), int64(k))
 		}
-		after := time.Now()
+		// after := time.Now()
 
 		if !success {
 			return false, -1
