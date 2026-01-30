@@ -582,7 +582,7 @@ def run_experiment(config_file, client_config_idx, executor):
                                       * config["client_processes_per_client_node"]))
         
         for i in range(config['num_experiment_runs']):
-            for k in range(config['client_processes_per_client_node']):
+            for k in config['client_processes_per_client_node']:
                 kill_clients(config, executor)
                 servers_alive = False
                 retries = 0

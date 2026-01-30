@@ -138,7 +138,7 @@
   "base_remote_bin_directory_nfs": "/users/rghilea/consensus",
   "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
-  "client_bin_name": "clientnew",
+  "client_bin_name": "client-mt",
   "client_debug_output": true,
   "client_experiment_length": 30,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",

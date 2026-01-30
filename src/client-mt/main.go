@@ -24,7 +24,7 @@ var clientId *int = flag.Int(
 var clientProcs *int = flag.Int(
 	"clientProcs",
 	0,
-	"Number of client procs running on this client.")
+	"Number of client processed running on this client.")
 
 var conflicts *int = flag.Int(
 	"conflicts",
