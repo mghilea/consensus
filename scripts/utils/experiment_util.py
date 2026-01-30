@@ -582,52 +582,51 @@ def run_experiment(config_file, client_config_idx, executor):
                                       * config["client_processes_per_client_node"]))
         
         for i in range(config['num_experiment_runs']):
-            for k in config['client_processes_per_client_node']:
-                kill_clients(config, executor)
-                servers_alive = False
-                retries = 0
-                master_threads = None
-                server_threads = None
-                while not servers_alive and retries <= config['max_retries']:
-                    if is_using_masters(config):
-                        kill_masters(config, executor)
-                        master_threads = start_masters(config, local_exp_directory,
-                                                    remote_exp_directory, i)
-                    
-                    kill_servers(config, executor)
-                    time.sleep(2)
-                    
-                    server_threads = start_servers(config, local_exp_directory,
-                                                remote_exp_directory, i)
-                    all_alive = True
-                    for server_thread in server_threads:
-                        if server_thread.poll() != None:
-                            all_alive = False
-                            break
-                    servers_alive = all_alive
-                    retries += 1
-                if not servers_alive:
-                    sys.stderr.write('Failed to start all servers.\n')
-                    raise
-                #print("Waiting {} seconds for servers to finish setup".format(5))
-                #time.sleep(5)
-                client_threads = start_clients(config, local_exp_directory,
-                                            remote_exp_directory, i, k)
-                wait_for_clients_to_terminate(config, client_threads)
-                print("Waiting {} seconds for clients to finish".format(5))
-                time.sleep(5)
-                kill_clients(config, executor)
-                time.sleep(1)
-                for server_thread in server_threads:
-                    server_thread.terminate()
-                kill_servers(config, executor, '-15')
+            kill_clients(config, executor)
+            servers_alive = False
+            retries = 0
+            master_threads = None
+            server_threads = None
+            while not servers_alive and retries <= config['max_retries']:
                 if is_using_masters(config):
-                    for master_thread in master_threads:
-                        master_thread.terminate()
                     kill_masters(config, executor)
-            return executor.submit(collect_and_calculate, config,
-                                client_config_idx, remote_exp_directory, local_out_directory,
-                                executor)
+                    master_threads = start_masters(config, local_exp_directory,
+                                                remote_exp_directory, i)
+                
+                kill_servers(config, executor)
+                time.sleep(2)
+                
+                server_threads = start_servers(config, local_exp_directory,
+                                            remote_exp_directory, i)
+                all_alive = True
+                for server_thread in server_threads:
+                    if server_thread.poll() != None:
+                        all_alive = False
+                        break
+                servers_alive = all_alive
+                retries += 1
+            if not servers_alive:
+                sys.stderr.write('Failed to start all servers.\n')
+                raise
+            #print("Waiting {} seconds for servers to finish setup".format(5))
+            #time.sleep(5)
+            client_threads = start_clients(config, local_exp_directory,
+                                        remote_exp_directory, i, config['client_processes_per_client_node'])
+            wait_for_clients_to_terminate(config, client_threads)
+            print("Waiting {} seconds for clients to finish".format(5))
+            time.sleep(5)
+            kill_clients(config, executor)
+            time.sleep(1)
+            for server_thread in server_threads:
+                server_thread.terminate()
+            kill_servers(config, executor, '-15')
+            if is_using_masters(config):
+                for master_thread in master_threads:
+                    master_thread.terminate()
+                kill_masters(config, executor)
+        return executor.submit(collect_and_calculate, config,
+                            client_config_idx, remote_exp_directory, local_out_directory,
+                            executor)
 
 
 def run_multiple_experiments(config_file, executor):
