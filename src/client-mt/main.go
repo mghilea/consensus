@@ -325,6 +325,19 @@ func main() {
 	// Create pool of physical clients (establishing connections to the servers)
 	clientPool := make(chan clients.Client, *physicalClientCount)
 
+	log.Printf("Initializing %d physical clients...\n", *physicalClientCount)
+    var initWg sync.WaitGroup
+    for i := 0; i < *physicalClientCount; i++ {
+        initWg.Add(1)
+        go func(idx int) {
+            defer initWg.Done()
+            client := createClientWithID(int32(*clientId*100000 + idx))
+            clientPool <- client
+        }(i)
+    }
+    initWg.Wait()
+    log.Println("All clients initialized and connected.")
+
 	for i := 0; i < *physicalClientCount; i++ {
         clientPool <- createClientWithID(int32(*clientId*100000 + i))
     }
