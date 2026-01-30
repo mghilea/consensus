@@ -338,10 +338,6 @@ func main() {
     initWg.Wait()
     log.Println("All clients initialized and connected.")
 
-	for i := 0; i < *physicalClientCount; i++ {
-        clientPool <- createClientWithID(int32(*clientId*100000 + i))
-    }
-
 	nextID := int32(*clientId * 1000000)
 	for i := 0; i < *clientProcs; i++ {
 		wg.Add(1)
