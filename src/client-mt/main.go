@@ -85,8 +85,8 @@ var coordinatorPort *int = flag.Int(
 
 var maxProcessors *int = flag.Int(
 	"maxProcessors",
-	2,
-	"GOMAXPROCS. Defaults to 2")
+	0,
+	"GOMAXPROCS. Defaults to 0")
 
 var numKeys *uint64 = flag.Uint64(
 	"numKeys",
@@ -181,26 +181,26 @@ var zipfV = flag.Float64(
 	"Zipfian v parameter. Generates values k∈ [0, numKeys] such that P(k) is "+
 		"proportional to (v + k) ** (-s)")
 
-func createClient() clients.Client {
+func createClientWithID(uniqueID int32) clients.Client {
 	switch *replProtocol {
 	case "abd":
-		return clients.NewAbdClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewAbdClient(int32(*uniqueID), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, *regular)
 	case "gryff":
-		return clients.NewGryffClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewGryffClient(int32(*uniqueID), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, *regular, *sequential, *proxy, *thrifty, *defaultReplicaOrder,
 			*epaxosMode)
 	case "epaxos":
-		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewProposeClient(int32(*uniqueID), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true)
 	case "mdl":
-		return clients.NewMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewMDLClient(int32(*uniqueID), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true, *singleShardAware)
 	case "ss-mdl":
-		return clients.NewSSMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewSSMDLClient(int32(*uniqueID), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, false)
 	default:
-		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewProposeClient(int32(*uniqueID), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, false)
 	}
 }
@@ -213,14 +213,92 @@ func Max(a int64, b int64) int64 {
 	}
 }
 
+func closedLoopClient(uniqueID int32, stop <-chan struct{}, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	r := rand.New(rand.NewSource(int64(uniqueID)))
+	zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
+	if err != nil {
+		panic("problem making the zipfian generator :0")
+	}
+	
+	client := createClientWithID(uniqueID)
+	count := int32(0)
+
+	start := time.Now()
+	var currRuntime time.Time
+
+	for {
+		select {
+		case <-stop:
+			client.Finish()
+			log.Printf("Total AppRequests attempted: %d, total system level requests: %d\n", count, count*int32(*fanout))
+			log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
+			return
+		default:
+		}
+
+		if *randSleep > 0 {
+			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
+		}
+
+		var opTypes []state.Operation
+		var k int64
+		var keys []int64
+
+		for i := 0; i < *fanout; i++ {
+			roll := r.Intn(1000)
+			var op state.Operation
+			if roll < *reads {
+				op = state.GET
+			} else if roll < *reads+*writes {
+				op = state.PUT
+			} else {
+				op = state.CAS
+			}
+			opTypes = append(opTypes, op)
+
+			if *conflicts >= 0 {
+				if r.Intn(*conflictsDenom) < *conflicts {
+					k = 0
+				} else {
+					k = (int64(count) << 32) | int64(uniqueID)
+				}
+			} else {
+				k = int64(zipf.Uint64())
+			}
+			keys = append(keys, k)
+		}
+
+		before := time.Now()
+		success, _ = client.AppRequest(opTypes, keys)
+		after := time.Now()
+
+		opString := "app"
+		if !success {
+			log.Printf("Failed %s(%d).\n", opString, count)
+		}
+		count++
+
+		currRuntime := time.Since(start)
+    	currInt := int(currRuntime.Seconds())
+
+		if *rampUp <= currInt && currInt < *expLength-*rampDown {
+			lat := int64(after.Sub(before).Nanoseconds())
+			fmt.Printf("%s,%d,%d,%d\n", opString, lat, k, count)
+
+		}
+	}
+}
+
 func main() {
 	flag.Parse()
 
-	if *conflicts > 100 {
-		log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
+	if *maxProcessors > 0 {
+		runtime.GOMAXPROCS(*maxProcessors)
+	} else {
+		runtime.GOMAXPROCS(runtime.NumCPU())
 	}
-
-	dlog.DLOG = *debug
 
 	if *conflicts >= 0 {
 		dlog.Println("Using uniform distribution")
@@ -232,106 +310,18 @@ func main() {
 		log.Fatalf("Writes (%d), reads (%d), and rmws (%d) must add up to 1000.\n", *writes, *reads, *rmws)
 	}
 
-	runtime.GOMAXPROCS(*maxProcessors)
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	nextID := int32(*clientId * 1000000)
 
-	if *cpuProfile != "" {
-		f, err := os.Create(*cpuProfile)
-		if err != nil {
-			log.Fatalf("Error creating CPU profile file %s: %v\n", *cpuProfile, err)
-		}
-		pprof.StartCPUProfile(f)
-		interrupt := make(chan os.Signal, 1)
-		signal.Notify(interrupt)
-		go catchKill(interrupt)
-		defer pprof.StopCPUProfile()
+	for i := 0; i < *clientsTotal; i++ {
+		wg.Add(1)
+		go closedLoopClient(nextID, stop, &wg)
+		nextID++
 	}
 
-	client := createClient()
-
-	r := rand.New(rand.NewSource(int64(*clientId)))
-  zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
-  if err != nil {
-    panic("problem making the zipfian generator :0")
-  }
-	var count int32
-	count = 0
-
-	go func(client clients.Client) {
-		time.Sleep(time.Duration(*expLength+1) * time.Second)
-		client.Finish()
-	}(client)
-
-	start := time.Now()
-	now := start
-	currRuntime := now.Sub(start)
-	for int(currRuntime.Seconds()) < *expLength {
-		if *randSleep > 0 {
-			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
-		}
-
-		var opTypes []state.Operation
-		var k int64
-		var keys []int64
-		for i := 0; i < *fanout; i++ {
-			opTypeRoll := r.Intn(1000)
-			var opType state.Operation
-			if opTypeRoll < *reads {
-				opType = state.GET
-			} else if opTypeRoll < *reads+*writes {
-				opType = state.PUT
-			} else {
-				opType = state.CAS
-			}
-			opTypes = append(opTypes, opType)
-
-			if *conflicts >= 0 {
-				if r.Intn(*conflictsDenom) < *conflicts {
-					k = 0
-				} else {
-					k = (int64(count) << 32) | int64(*clientId)
-				}
-			} else {
-				k = int64(zipf.Uint64())
-				//k = int64(r.Intn(int(*numKeys)))
-			}
-			keys = append(keys, k)
-		}
-
-		var success bool
-
-		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
-		before := time.Now()
-		success, _ = client.AppRequest(opTypes, keys)
-		after := time.Now()
-                //dlog.Printf("!!!!Paxos APP level write took %d microseconds\n", int64(after.Sub(before).Microseconds()))
-
-		opString := "app"
-		if !success {
-			log.Printf("Failed %s(%d).\n", opString, count)
-		}
-		count++
-		// dlog.Printf("AppRequests attempted: %d\n", count)
-		//dlog.Printf("AppRequests attempted: %d at time %d\n", count, time.Now().UnixMilli())
-
-		currInt := int(currRuntime.Seconds())
-		if *rampUp <= currInt && currInt < *expLength-*rampDown {
-			lat := int64(after.Sub(before).Nanoseconds())
-			fmt.Printf("%s,%d,%d,%d\n", opString, lat, k, count)
-
-		}
-		now = time.Now()
-		currRuntime = now.Sub(start)
-	}
-	log.Printf("Total AppRequests attempted: %d, total system level requests: %d\n", count, count*int32(*fanout))
-	log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
-	client.Finish()
-}
-
-func catchKill(interrupt chan os.Signal) {
-	<-interrupt
-	if *cpuProfile != "" {
-		pprof.StopCPUProfile()
-	}
-	log.Printf("Caught signal and stopped CPU profile before exit.\n")
-	os.Exit(0)
+	// Run for expLength seconds
+	time.Sleep(time.Duration(*expLength) * time.Second)
+	close(stop)
+	wg.Wait()
 }
