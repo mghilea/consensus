@@ -235,6 +235,7 @@ func clientWorkerAsync(startID int32, nClients int, stop <-chan struct{}, result
 	}
 
 	start := time.Now()
+	r := rand.New(rand.NewSource(int64(startID)))
 
 	for {
 		select {
@@ -283,12 +284,17 @@ func clientWorkerAsync(startID int32, nClients int, stop <-chan struct{}, result
 				after := time.Now()
 
 				opString := "app"
+
+				if !success {
+					log.Printf("Failed %s request.\n", opString)
+				}
+
 				currRuntime := time.Since(start)
 				currInt := int(currRuntime.Seconds())
 
 				if *rampUp <= currInt && currInt < *expLength-*rampDown {
 					lat := int64(after.Sub(before).Nanoseconds())
-					results <- Result{opString, lat, uniqueID, count}
+					results <- Result{opString, lat, startID, 0}
 				}
 
 				// Mark client as ready to fire next request
@@ -338,8 +344,8 @@ func main() {
 		}
 	}()
 
-	clientsPerWorker := clientProcs / workers
-    extra := clientProcs % workers
+	clientsPerWorker := *clientProcs / workers
+    extra := *clientProcs % workers
 	nextID := int32(*clientId * 1000000)
 
 	for i := 0; i < workers; i++ {
