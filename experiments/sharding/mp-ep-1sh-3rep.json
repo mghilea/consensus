@@ -76,7 +76,7 @@
     [2500],
     [2500]
   ],
-
+  "physical_client_count": 500,
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
   "client_write_percentage": 1000,

@@ -24,7 +24,12 @@ var clientId *int = flag.Int(
 var clientProcs *int = flag.Int(
 	"clientProcs",
 	1,
-	"Number of client processed running on this client.")
+	"Number of client processes running on this client.")
+
+var physicalClientCount *int = flag.Int(
+	"physicalClientCount",
+	1,
+	"Number of physical clients this machine holds.")
 
 var conflicts *int = flag.Int(
 	"conflicts",
@@ -225,33 +230,23 @@ func Max(a int64, b int64) int64 {
 	}
 }
 
-func closedLoopClient(uniqueID int32, stop <-chan struct{}, results chan<- Result, wg *sync.WaitGroup) {
+func clientWorker(uniqueID int32, clientPool chan clients.Client, stop <-chan struct{}, results chan<- Result, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	r := rand.New(rand.NewSource(int64(uniqueID) + time.Now().UnixNano()))
-	zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
-	if err != nil {
-		log.Fatalf("Zipf init failed: %v", err)
-	}
-
-	client := createClientWithID(uniqueID)
-	defer client.Finish()
-
+	zipf, _ := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
+	
 	opTypes := make([]state.Operation, *fanout)
 	keys := make([]int64, *fanout)
-	
 	count := int32(0)
-	start := time.Now()
-	
+
+	startTime := time.Now()
 	rampUpTime := time.Duration(*rampUp) * time.Second
 	expEndTime := time.Duration(*expLength-*rampDown) * time.Second
 
 	for {
 		select {
 		case <-stop:
-			elapsed := time.Since(start)
-			log.Printf("Total AppRequests attempted: %d, total system level requests: %d\n", count, count*int32(*fanout))
-			log.Printf("Experiment over after %f seconds\n", int(elapsed.Seconds()))
 			return
 		default:
 		}
@@ -260,36 +255,32 @@ func closedLoopClient(uniqueID int32, stop <-chan struct{}, results chan<- Resul
 			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6)))
 		}
 
-		for i := 0; i < *fanout; i++ {
+		for j := 0; j < *fanout; j++ {
 			roll := r.Intn(1000)
 			if roll < *reads {
-				opTypes[i] = state.GET
+				opTypes[j] = state.GET
 			} else if roll < *reads+*writes {
-				opTypes[i] = state.PUT
+				opTypes[j] = state.PUT
 			} else {
-				opTypes[i] = state.CAS
+				opTypes[j] = state.CAS
 			}
-
-			if *conflicts >= 0 {
-				if r.Intn(*conflictsDenom) < *conflicts {
-					keys[i] = 0
-				} else {
-					keys[i] = (int64(count) << 32) | int64(uniqueID)
-				}
-			} else {
-				keys[i] = int64(zipf.Uint64())
-			}
+			keys[j] = int64(zipf.Uint64())
 		}
 
+		// Acquire client from pool
+		c := <-clientPool
+
 		before := time.Now()
-		success, _ := client.AppRequest(opTypes, keys)
+		success, _ := c.AppRequest(opTypes, keys)
 		after := time.Now()
 
+		// Return client to the pool
+		clientPool <- c
 		count++
-
-		elapsed := after.Sub(start)
+		
+		elapsed := after.Sub(startTime)
 		if elapsed >= rampUpTime && elapsed < expEndTime {
-			if success {
+			if success { 
 				results <- Result{"app", after.Sub(before).Nanoseconds(), uniqueID, count}
 			}
 		}
@@ -314,17 +305,16 @@ func main() {
 	if *writes+*reads+*rmws != 1000 {
 		log.Fatalf("Writes (%d), reads (%d), and rmws (%d) must add up to 1000.\n", *writes, *reads, *rmws)
 	}
-
+	
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-
 	results := make(chan Result, 1000000)
 
 	var loggerWg sync.WaitGroup
 	loggerWg.Add(1)
 	go func() {
 		defer loggerWg.Done()
-		writer := bufio.NewWriterSize(os.Stdout, 1024*1024)
+		writer := bufio.NewWriterSize(os.Stdout, 16*1024*1024)
 		defer writer.Flush()
 
 		for r := range results {
@@ -332,10 +322,17 @@ func main() {
 		}
 	}()
 
+	// Create pool of physical clients (establishing connections to the servers)
+	clientPool := make(chan clients.Client, *physicalClientCount)
+
+	for i := 0; i < *physicalClientCount; i++ {
+        clientPool <- createClientWithID(int32(*clientId*100000 + i))
+    }
+
 	nextID := int32(*clientId * 1000000)
 	for i := 0; i < *clientProcs; i++ {
 		wg.Add(1)
-		go closedLoopClient(nextID, stop, results, &wg)
+		go clientWorker(nextID, clientPool, stop, results, &wg)
 		nextID++
 	}
 
