@@ -238,7 +238,7 @@ func closedLoopClient(uniqueID int32, stop <-chan struct{}, results chan<- Resul
 			client.Finish()
 			elapsed := time.Since(start)
 			log.Printf("Total AppRequests attempted: %d, total system level requests: %d\n", count, count*int32(*fanout))
-			log.Printf("Experiment over after %f seconds\n", int(elapsed.Seconds()))
+			log.Printf("Experiment over after %.2f seconds\n", elapsed.Seconds())
 			return
 		default:
 		}

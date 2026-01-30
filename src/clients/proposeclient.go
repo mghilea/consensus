@@ -59,7 +59,7 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (boo
 
 		if success {
 			lat := after.Sub(before).Nanoseconds()
-			fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
+			// fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
 		} else {
 			return false, -1
 		}
