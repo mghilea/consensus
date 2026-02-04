@@ -26,8 +26,8 @@ var clientProcs *int = flag.Int(
 	1,
 	"Number of client processes running on this client.")
 
-var physicalClientCount *int = flag.Int(
-	"physicalClientCount",
+var clientPoolSize *int = flag.Int(
+	"clientPoolSize",
 	1,
 	"Number of physical clients this machine holds.")
 
@@ -322,12 +322,12 @@ func main() {
 		}
 	}()
 
-	// Create pool of physical clients (establishing connections to the servers)
-	clientPool := make(chan clients.Client, *physicalClientCount)
+	// Create pool of clients (establishing connections to the servers)
+	clientPool := make(chan clients.Client, *clientProcs)
 
-	log.Printf("Initializing %d physical clients...\n", *physicalClientCount)
+	log.Printf("Initializing a pool of %d clients...\n", *clientProcs)
     var initWg sync.WaitGroup
-    for i := 0; i < *physicalClientCount; i++ {
+    for i := 0; i < *clientProcs; i++ {
         initWg.Add(1)
         go func(idx int) {
             defer initWg.Done()
@@ -336,7 +336,7 @@ func main() {
         }(i)
     }
     initWg.Wait()
-    log.Println("All clients initialized and connected.")
+    log.Println("All %d clients initialized and connected.", *clientProcs)
 
 	nextID := int32(*clientId * 1000000)
 	for i := 0; i < *clientProcs; i++ {
