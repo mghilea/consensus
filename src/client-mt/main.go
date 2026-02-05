@@ -299,6 +299,7 @@ func clientWorker(uniqueID int32, clientPoolSize int, stop <-chan struct{}, resu
 		case msg := <-replyChan:
         	resp := msg.(*genericsmrproto.ProposeReplyTS)
 			// If successful, record request latency
+			log.Printf("Received response for CommandId %d\n", resp.CommandId)
 			clientId := resp.CommandId / 1000 - uniqueID*100000
 			c := clients[clientId]
 			
