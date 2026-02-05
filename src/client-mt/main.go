@@ -247,6 +247,8 @@ func clientWorker(uniqueID int32, clientPool chan clients.Client, stop <-chan st
 	for {
 		select {
 		case <-stop:
+			endTime := time.Now()
+			log.Printf("Client thread terminated after %.2f seconds. Total app requests completed: %d\n", endTime.Sub(startTime).Seconds(), count)
 			return
 		default:
 		}
@@ -276,11 +278,11 @@ func clientWorker(uniqueID int32, clientPool chan clients.Client, stop <-chan st
 
 		// Return client to the pool
 		clientPool <- c
-		count++
 		
 		elapsed := after.Sub(startTime)
 		if elapsed >= rampUpTime && elapsed < expEndTime {
 			if success { 
+				count++
 				results <- Result{"app", after.Sub(before).Nanoseconds(), uniqueID, count}
 			}
 		}
@@ -326,6 +328,7 @@ func main() {
 	clientPool := make(chan clients.Client, *clientProcs)
 
 	log.Printf("Initializing a pool of %d clients...\n", *clientProcs)
+	initStart := time.Now()
     var initWg sync.WaitGroup
     for i := 0; i < *clientProcs; i++ {
         initWg.Add(1)
@@ -336,7 +339,9 @@ func main() {
         }(i)
     }
     initWg.Wait()
-    log.Println("All %d clients initialized and connected.", *clientProcs)
+	initEnd := time.Now()
+	initTime := initEnd.Sub(initStart).Seconds()
+    log.Printf("All %d clients initialized in %.2f seconds.", *clientProcs, initTime)
 
 	nextID := int32(*clientId * 1000000)
 	for i := 0; i < *clientProcs; i++ {

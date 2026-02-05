@@ -5,7 +5,9 @@ import (
 	"fastrpc"
 	"genericsmr"
 	"genericsmrproto"
+	"log"
 	"state"
+	"time"
 )
 
 type ProposeClient struct {
@@ -37,6 +39,7 @@ func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader i
 }
 
 func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
+	reqStart := time.Now()
 	for i, opType := range opTypes {
 		k := keys[i]
 
@@ -61,12 +64,14 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (boo
 			// fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
 		}
 	}
-
+	
+	reqEnd := time.Now()
+	log.Printf("App request took %.2f seconds.", reqEnd.Sub(reqStart).Seconds())
 	return true, 0
 }
 
 func (c *ProposeClient) Read(key int64) (bool, int64) {
-	commandId := c.opCount
+	commandId := c.id * 1000 + c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, 0)
 	c.propose.Command.Op = state.GET
@@ -74,7 +79,7 @@ func (c *ProposeClient) Read(key int64) (bool, int64) {
 }
 
 func (c *ProposeClient) Write(key int64, value int64) bool {
-	commandId := c.opCount
+	commandId := c.id * 1000 + c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, value)
 	c.propose.Command.Op = state.PUT
@@ -84,7 +89,7 @@ func (c *ProposeClient) Write(key int64, value int64) bool {
 
 func (c *ProposeClient) CompareAndSwap(key int64, oldValue int64,
 	newValue int64) (bool, int64) {
-	commandId := c.opCount
+	commandId := c.id * 1000 + c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, newValue)
 	c.propose.Command.OldValue = state.Value(newValue)

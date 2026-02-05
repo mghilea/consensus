@@ -71,6 +71,8 @@ class ShardingCodebase(ExperimentCodebase):
         # # Limit process to only use 'num_shards' cores
         # client_command += ' taskset -c 0-%d ' % (config['num_shards'] - 1)
 
+        client_command += 'GODEBUG=schedtrace=1000,scheddetail=1 '
+
         client_command += ' '.join([str(x) for x in [
             path_to_client_bin,
             '-clientId', i,
