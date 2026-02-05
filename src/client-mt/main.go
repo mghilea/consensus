@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"clients"
 	"dlog"
+	"fastrpc"
 	"flag"
 	"fmt"
+	"genericsmr"
+	"genericsmrproto"
 	"log"
 	"math/rand"
 	"os"
@@ -194,31 +197,22 @@ type Result struct {
 }
 
 type ClientJob struct {
-	client clients.Client
-	id     int32
+	id        int32
+	client    clients.Client
+	r         *rand.Rand
+	zipf      *zipfgenerator.ZipfGenerator
+	replyChan chan fastrpc.Serializable
+	startTime time.Time
 }
 
-func createClientWithID(uniqueID int32) clients.Client {
+func createClientWithID(uniqueID int32, replyChan chan fastrpc.Serializable) clients.Client {
 	switch *replProtocol {
-	case "abd":
-		return clients.NewAbdClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, *regular)
-	case "gryff":
-		return clients.NewGryffClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, *regular, *sequential, *proxy, *thrifty, *defaultReplicaOrder,
-			*epaxosMode)
 	case "epaxos":
 		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, true)
-	case "mdl":
-		return clients.NewMDLClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, true, *singleShardAware)
-	case "ss-mdl":
-		return clients.NewSSMDLClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, false)
+			*statsFile, false, true, replyChan)
 	default:
 		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, false)
+			*statsFile, false, false, replyChan)
 	}
 }
 
@@ -230,35 +224,56 @@ func Max(a int64, b int64) int64 {
 	}
 }
 
-func clientWorker(uniqueID int32, clientPool chan clients.Client, stop <-chan struct{}, results chan<- Result, wg *sync.WaitGroup) {
+func clientWorker(uniqueID int32, clientPoolSize int, stop <-chan struct{}, results chan<- Result, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	r := rand.New(rand.NewSource(int64(uniqueID) + time.Now().UnixNano()))
-	zipf, _ := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
-	
-	opTypes := make([]state.Operation, *fanout)
-	keys := make([]int64, *fanout)
-	count := int32(0)
+	// Initialize a shared reply channel for all clients on this worker thread
+	replyChan := make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE)
 
-	startTime := time.Now()
+	// Create pool of clients (establishing connections to the servers)
+	clients := make([]ClientJob, clientPoolSize)
+
+	log.Printf("Client thread %d initializing a pool of %d clients...\n", uniqueID, clientPoolSize)
+	initStart := time.Now()
+    var initWg sync.WaitGroup
+    for i := 0; i < clientPoolSize; i++ {
+        initWg.Add(1)
+        go func(idx int) {
+            defer initWg.Done()
+            client := createClientWithID(uniqueID*100000 + int32(idx), replyChan)
+			r := rand.New(rand.NewSource(int64(uniqueID) + time.Now().UnixNano()))
+			zipf, _ := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
+            clients[i] = ClientJob{int32(idx), client, r, zipf, replyChan, time.Now()}
+        }(i)
+    }
+    initWg.Wait()
+	initEnd := time.Now()
+	initTime := initEnd.Sub(initStart).Seconds()
+    log.Printf("Client thread %d initialized all clients in %.2f seconds.", uniqueID, initTime)
+
+	expStartTime := time.Now()
 	rampUpTime := time.Duration(*rampUp) * time.Second
 	expEndTime := time.Duration(*expLength-*rampDown) * time.Second
 
-	for {
-		select {
-		case <-stop:
-			endTime := time.Now()
-			log.Printf("Client thread terminated after %.2f seconds. Total app requests completed: %d\n", endTime.Sub(startTime).Seconds(), count)
-			return
-		default:
-		}
+	_ = expStartTime
+	_ = rampUpTime
+	_ = expEndTime
+	
+	count := 0
+
+	// Send a request on each of the clients
+	for i := range clients {
+		c := clients[i]
 
 		if *randSleep > 0 {
-			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6)))
+			time.Sleep(time.Duration(c.r.Intn(*randSleep * 1e6)))
 		}
 
+		opTypes := make([]state.Operation, *fanout)
+		keys := make([]int64, *fanout)
+
 		for j := 0; j < *fanout; j++ {
-			roll := r.Intn(1000)
+			roll := c.r.Intn(1000)
 			if roll < *reads {
 				opTypes[j] = state.GET
 			} else if roll < *reads+*writes {
@@ -266,25 +281,61 @@ func clientWorker(uniqueID int32, clientPool chan clients.Client, stop <-chan st
 			} else {
 				opTypes[j] = state.CAS
 			}
-			keys[j] = int64(zipf.Uint64())
+			keys[j] = int64(c.zipf.Uint64())
 		}
-
-		// Acquire client from pool
-		c := <-clientPool
-
-		before := time.Now()
-		success, _ := c.AppRequest(opTypes, keys)
-		after := time.Now()
-
-		// Return client to the pool
-		clientPool <- c
 		
-		elapsed := after.Sub(startTime)
-		if elapsed >= rampUpTime && elapsed < expEndTime {
-			if success { 
-				count++
-				results <- Result{"app", after.Sub(before).Nanoseconds(), uniqueID, count}
+		c.startTime = time.Now()
+		success, _ := c.client.AppRequest(opTypes, keys)
+		_ = success
+	}
+
+	for {
+		select {
+		case <-stop:
+			endTime := time.Now()
+			log.Printf("Client thread %d terminated after %.2f seconds. Total app requests completed: %d\n", uniqueID, endTime.Sub(expStartTime).Seconds(), count)
+			return
+
+		case msg := <-replyChan:
+        	resp := msg.(*genericsmrproto.ProposeReplyTS)
+			// If successful, record request latency
+			clientId := resp.CommandId / 1000 - uniqueID*100000
+			c := clients[clientId]
+			
+			endTime := time.Now()
+			lat := endTime.Sub(c.startTime).Nanoseconds()
+
+			elapsed := endTime.Sub(expStartTime)
+			if elapsed >= rampUpTime && elapsed < expEndTime {
+				if resp.OK != 0 { 
+					count++
+					results <- Result{"app", lat, uniqueID, int32(count)}
+				}
 			}
+
+			// Send the next request on the same client
+			if *randSleep > 0 {
+				time.Sleep(time.Duration(c.r.Intn(*randSleep * 1e6)))
+			}
+
+			opTypes := make([]state.Operation, *fanout)
+			keys := make([]int64, *fanout)
+
+			for j := 0; j < *fanout; j++ {
+				roll := c.r.Intn(1000)
+				if roll < *reads {
+					opTypes[j] = state.GET
+				} else if roll < *reads+*writes {
+					opTypes[j] = state.PUT
+				} else {
+					opTypes[j] = state.CAS
+				}
+				keys[j] = int64(c.zipf.Uint64())
+			}
+			
+			c.startTime = time.Now()
+			success, _ := c.client.AppRequest(opTypes, keys)
+			_ = success
 		}
 	}
 }
@@ -324,30 +375,19 @@ func main() {
 		}
 	}()
 
-	// Create pool of clients (establishing connections to the servers)
-	clientPool := make(chan clients.Client, *clientProcs)
+	
 
-	log.Printf("Initializing a pool of %d clients...\n", *clientProcs)
-	initStart := time.Now()
-    var initWg sync.WaitGroup
-    for i := 0; i < *clientProcs; i++ {
-        initWg.Add(1)
-        go func(idx int) {
-            defer initWg.Done()
-            client := createClientWithID(int32(*clientId*100000 + idx))
-            clientPool <- client
-        }(i)
-    }
-    initWg.Wait()
-	initEnd := time.Now()
-	initTime := initEnd.Sub(initStart).Seconds()
-    log.Printf("All %d clients initialized in %.2f seconds.", *clientProcs, initTime)
+	workerThreads := runtime.NumCPU()
+	clientPool := *clientProcs / workerThreads
+	extra := *clientProcs % workerThreads
 
-	nextID := int32(*clientId * 1000000)
-	for i := 0; i < *clientProcs; i++ {
+	for i := 0; i < workerThreads; i++ {
 		wg.Add(1)
-		go clientWorker(nextID, clientPool, stop, results, &wg)
-		nextID++
+		poolSize := clientPool
+		if i < extra{
+			poolSize += 1
+		}
+		go clientWorker(int32(i), poolSize, stop, results, &wg)
 	}
 
 	// Run for expLength seconds
