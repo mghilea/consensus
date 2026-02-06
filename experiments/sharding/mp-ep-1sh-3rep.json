@@ -69,12 +69,12 @@
       }
   },
   "client_total": [
-    [7500],
-    [7500]
+    [3072],
+    [3072]
   ],
   "client_processes_per_client_node": [
-    [2500],
-    [2500]
+    [1024],
+    [1024]
   ],
   "clientPoolSize": 1000,
   "client_threads_per_process": 1,
