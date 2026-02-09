@@ -65,12 +65,12 @@
       }
   },
   "client_total": [
-    [1, 2],
-    [1, 2]
+    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 2500, 3000, 3500, 4000],
+    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 2500, 3000, 3500, 4000]
   ],
   "client_processes_per_client_node": [
-    [1, 2],
-    [1, 2]
+    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 2500, 3000, 3500, 4000],
+    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 2500, 3000, 3500, 4000]
   ],
   "clientPoolSize": 1000,
   "client_threads_per_process": 1,
@@ -97,7 +97,7 @@
       "series_titles": ["Multi-Paxos", "EPaxos"],
       "x_var_is_config": false,
       "x_var": ["run_stats", "app", "tput", "p50"],
-      "x_label": "Throughput (ops/s)",
+      "x_label": "Number of logical clients",
       "y_label": "p99 Latency",
       "x_indep_vars_idx": 1,
       "y_var": ["aggregate", "app", "p99"]
@@ -111,7 +111,7 @@
       "series_titles": ["Multi-Paxos", "EPaxos"],
       "x_var_is_config": false,
       "x_var": ["run_stats", "app", "tput", "p50"],
-      "x_label": "Throughput (ops/s)",
+      "x_label": "Number of logical clients",
       "y_label": "p50 Latency",
       "x_indep_vars_idx": 1,
       "y_var": ["aggregate", "app", "p50"]

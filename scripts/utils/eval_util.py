@@ -508,7 +508,7 @@ def generate_plots(config, base_out_directory, out_dirs):
     for plot in config['plots']:
         if len(config['experiment_independent_vars']) - len(config['experiment_independent_vars_unused']) == 1:
             # generate csvs and single series plots
-            x_vars = config["client_processes_per_client_node"]
+            x_vars = []
             y_vars = []
             for i in range(len(out_dirs[0])):
                 assert type(out_dirs[0][i]) is str
@@ -517,20 +517,20 @@ def generate_plots(config, base_out_directory, out_dirs):
                 print(stats_file)
                 with open(stats_file) as f:
                     stats = json.load(f)
-                    # if plot['x_var_is_config']:
-                    #     x_var = config
-                    #     for k in plot['x_var']:
-                    #         x_var = x_var[k]
-                    #     x_var = x_var[i]
-                    # else:
-                    #     x_var = stats
-                    #     for k in plot['x_var']:
-                    #         if k in x_var:
-                    #             x_var = x_var[k]
-                    #         else:
-                    #             x_var = 0
-                    #             break
-                    # x_vars.append(x_var)
+                    if plot['x_var_is_config']:
+                        x_var = config
+                        for k in plot['x_var']:
+                            x_var = x_var[k]
+                        x_var = x_var[i]
+                    else:
+                        x_var = stats
+                        for k in plot['x_var']:
+                            if k in x_var:
+                                x_var = x_var[k]
+                            else:
+                                x_var = 0
+                                break
+                    x_vars.append(x_var)
 
                     y_var = stats
                     for k in plot['y_var']:
