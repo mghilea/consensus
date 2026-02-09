@@ -33,28 +33,18 @@
     ]
   ],
   "clients": [
-	  "client-0-0",
-    "client-0-1",
-	  "client-1-0",
-    "client-1-1",
-    "client-2-0",
-    "client-2-1"
+	  "client-0-0"
   ],
   "server_regions": {
     "virginia": [
       "us-east-1-0",
-      "client-0-0",
-      "client-0-1"
+      "client-0-0"
     ],
     "california": [
-      "us-west-1-0",
-      "client-1-0",
-      "client-1-1"
+      "us-west-1-0"
     ],
     "ireland": [
-      "eu-west-1-0",
-      "client-2-0",
-      "client-2-1"
+      "eu-west-1-0"
     ]
   },
   "region_rtt_latencies": {
@@ -75,12 +65,12 @@
       }
   },
   "client_total": [
-    [6, 12, 24, 48, 96, 192, 384, 768, 1536, 3072, 6144],
-    [6, 12, 24, 48, 96, 192, 384, 768, 1536, 3072, 6144]
+    [1, 2],
+    [1, 2]
   ],
   "client_processes_per_client_node": [
-    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],
-    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+    [1, 2],
+    [1, 2]
   ],
   "clientPoolSize": 1000,
   "client_threads_per_process": 1,

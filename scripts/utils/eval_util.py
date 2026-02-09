@@ -751,6 +751,14 @@ def generate_tput_lat_plot(config, plots_directory, plot_name, tputs, lats):
     run_gnuplot([plot_csv_file], os.path.join(plots_directory,
         '%s.png' % plot_name), plot_script_file)
 
+def generate_tput_lat_plot(config, plots_directory, plot_name, tputs, lats):
+    plot_csv_file = os.path.join(plots_directory, '%s.csv' % plot_name)
+    generate_csv_for_tput_lat_plot(plot_csv_file, tputs, lats)
+    plot_script_file = os.path.join(plots_directory, '%s.gpi' % plot_name)
+    generate_gnuplot_script_tput_lat(config, plot_script_file)
+    run_gnuplot([plot_csv_file], os.path.join(plots_directory,
+        '%s.png' % plot_name), plot_script_file)
+
 STATS_FILE = 'stats.json'
 
 def generate_tput_lat_plots(config, base_out_directory, exp_out_directories):
@@ -777,6 +785,30 @@ def generate_tput_lat_plots(config, base_out_directory, exp_out_directories):
         plot_name = 'tput-%s-lat' % lat_stat
         print(plots_directory)
         generate_tput_lat_plot(config, plots_directory, plot_name, tputs, lat)
+
+def generate_clientnum_lat_plots(config, base_out_directory, exp_out_directories):
+    plots_directory = os.path.join(base_out_directory, config['plot_directory_name'])
+    os.makedirs(plots_directory, exist_ok=True)
+    client_num = config["client_processes_per_client_node"]
+    lats = {}
+    for i in range(len(exp_out_directories)):
+        stats_file = os.path.join(exp_out_directories[i], STATS_FILE)
+        print(stats_file)
+        with open(stats_file) as f:
+            stats = json.load(f)
+            if 'combined' in stats['run_stats']:
+                combined_run_stats = stats['run_stats']['combined']
+                ignore = {'stddev': 1, 'var' : 1, 'tput': 1, 'ops': 1}
+                for lat_stat, lat in combined_run_stats.items():
+                    if lat_stat in ignore:
+                        continue
+                    if lat_stat not in lats:
+                        lats[lat_stat] = []
+                    lats[lat_stat].append(lat['p50']) # median of runs
+    for lat_stat, lat in lats.items():
+        plot_name = 'clientnum-%s-lat' % lat_stat
+        print(plots_directory)
+        generate_tput_lat_plot(config, plots_directory, plot_name, client_num, lat)
 
 def generate_agg_cdf_plots(config, base_out_directory, sub_out_directories):
     plots_directory = os.path.join(base_out_directory, config['plot_directory_name'])
@@ -1028,7 +1060,7 @@ def regenerate_plots(config_file, exp_dir, executor, calc_stats=True):
                     with open(os.path.join(sub_out_dir, STATS_FILE)) as f:
                         stats = json.load(f)
                 generate_cdf_plots(config_new_new, sub_out_dir, stats, executor)
-            generate_tput_lat_plots(config_new, out_dir, dirs)
+            generate_clientnum_lat_plots(config_new, out_dir, dirs)
         generate_agg_cdf_plots(config, exp_dir, sub_out_directories)
         generate_agg_tput_lat_plots(config, exp_dir, out_directories)
 
