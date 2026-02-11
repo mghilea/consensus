@@ -29,11 +29,6 @@ var clientProcs *int = flag.Int(
 	1,
 	"Number of client processes running on this client.")
 
-var clientPoolSize *int = flag.Int(
-	"clientPoolSize",
-	1,
-	"Number of physical clients this machine holds.")
-
 var conflicts *int = flag.Int(
 	"conflicts",
 	-1,

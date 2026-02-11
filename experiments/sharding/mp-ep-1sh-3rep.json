@@ -33,18 +33,28 @@
     ]
   ],
   "clients": [
-	  "client-0-0"
+	  "client-0-0",
+    "client-0-1",
+    "client-1-0",
+    "client-1-1",
+    "client-2-0",
+    "client-2-1"
   ],
   "server_regions": {
     "virginia": [
       "us-east-1-0",
-      "client-0-0"
+      "client-0-0",
+      "client-0-1"
     ],
     "california": [
-      "us-west-1-0"
+      "us-west-1-0",
+      "client-1-0",
+      "client-1-1"
     ],
     "ireland": [
-      "eu-west-1-0"
+      "eu-west-1-0",
+      "client-2-0",
+      "client-2-1"
     ]
   },
   "region_rtt_latencies": {
@@ -64,15 +74,14 @@
         "ireland": 0
       }
   },
-  "client_total": [
-    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 2500, 3000, 3500, 4000],
-    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 2500, 3000, 3500, 4000]
+ "client_total": [
+    [6, 12, 24, 48, 96, 192, 384, 768, 1536, 3072, 6144, 12288],
+    [6, 12, 24, 48, 96, 192, 384, 768, 1536, 3072, 6144, 12288]
   ],
   "client_processes_per_client_node": [
-    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 2500, 3000, 3500, 4000],
-    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 2500, 3000, 3500, 4000]
+    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048],
+    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
   ],
-  "clientPoolSize": 1000,
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
   "client_write_percentage": 1000,
@@ -97,7 +106,7 @@
       "series_titles": ["Multi-Paxos", "EPaxos"],
       "x_var_is_config": false,
       "x_var": ["run_stats", "app", "tput", "p50"],
-      "x_label": "Number of logical clients",
+      "x_label": "Throughput (ops/s)",
       "y_label": "p99 Latency",
       "x_indep_vars_idx": 1,
       "y_var": ["aggregate", "app", "p99"]
@@ -111,7 +120,7 @@
       "series_titles": ["Multi-Paxos", "EPaxos"],
       "x_var_is_config": false,
       "x_var": ["run_stats", "app", "tput", "p50"],
-      "x_label": "Number of logical clients",
+      "x_label": "Throughput (ops/s)",
       "y_label": "p50 Latency",
       "x_indep_vars_idx": 1,
       "y_var": ["aggregate", "app", "p50"]

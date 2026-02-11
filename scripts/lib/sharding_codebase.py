@@ -77,7 +77,6 @@ class ShardingCodebase(ExperimentCodebase):
             path_to_client_bin,
             '-clientId', i,
             '-clientProcs', k,
-            '-clientPoolSize', config['clientPoolSize'],
             '-expLength', config['client_experiment_length'],
             '-caddr', coordinator_host,
             '-cport', coordinator_port,
