@@ -216,8 +216,8 @@ class ShardingCodebase(ExperimentCodebase):
         if 'max_file_descriptors' in config:
             replica_command += ' ulimit -n %d; ' % config['max_file_descriptors']
 
-        # Limit process to only use 'num_shards' cores
-        replica_command += ' taskset -c 0-%d ' % (config['num_shards'] - 1)
+        # Limit process to only use certain cores
+        replica_command += ' taskset -c 0-%d ' % (config['server_max_processors'] - 1)
 
         replica_command += ' '.join([str(x) for x in [
             path_to_server_bin,
