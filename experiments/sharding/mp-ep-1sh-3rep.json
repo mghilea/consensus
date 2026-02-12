@@ -153,12 +153,12 @@
       }
   },
  "client_total": [
-    [45],
-    [45]
+    [45, 90, 180],
+    [45, 90, 180]
   ],
   "client_processes_per_client_node": [
-    [1],
-    [1]
+    [1, 2, 4],
+    [1, 2, 4]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -223,7 +223,7 @@
   "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
-  "client_debug_output": false,
+  "client_debug_output": true,
   "client_experiment_length": 30,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
@@ -253,7 +253,7 @@
   "server_bin_name": "server",
   "server_cpuprofile": false,
   "server_blockprofile": false,
-  "server_debug_output": false,
+  "server_debug_output": true,
   "server_durable": false,
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
