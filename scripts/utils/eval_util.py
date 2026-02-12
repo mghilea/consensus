@@ -107,43 +107,42 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
 
             client_dir = os.path.join(local_out_directory, client)
 
-            k = config["client_processes_per_client_node"]
-            
-            # Process stdout log
-            client_out_file = os.path.join(client_dir, f"{client}-{k}-stdout-{run}.log")
+            for k in range(config["client_processes_per_client_node"]):
+                # Process stdout log
+                client_out_file = os.path.join(client_dir, f"{client}-{k}-stdout-{run}.log")
 
-            if os.path.exists(client_out_file):
-                with open(client_out_file) as f:
-                    for line in f:
-                        opCols = line.strip().split(',')
-                        for x in range(0, len(opCols), 2):
-                            op = opCols[x]
-                            if op.isdigit() or op in blacklist:
-                                continue
-                            opVal = float(opCols[x+1]) / input_scale * output_scale
-                            op_latencies[op].append(opVal)
-                            op_latency_counts[op] += 1
-                            if op not in combine_blacklist:
-                                op_latencies['combined'].append(opVal)
-                                op_latency_counts['combined'] += 1
+                if os.path.exists(client_out_file):
+                    with open(client_out_file) as f:
+                        for line in f:
+                            opCols = line.strip().split(',')
+                            for x in range(0, len(opCols), 2):
+                                op = opCols[x]
+                                if op.isdigit() or op in blacklist:
+                                    continue
+                                opVal = float(opCols[x+1]) / input_scale * output_scale
+                                op_latencies[op].append(opVal)
+                                op_latency_counts[op] += 1
+                                if op not in combine_blacklist:
+                                    op_latencies['combined'].append(opVal)
+                                    op_latency_counts['combined'] += 1
 
-                # Remove file that was just processed if debug mode is off                
-                if delete_files:
-                    os.remove(client_out_file)
+                    # Remove file that was just processed if debug mode is off                
+                    if delete_files:
+                        os.remove(client_out_file)
 
-            # Process client stats JSON
-            client_stats_file = os.path.join(client_dir, f"{client}-{k}-stats-{run}.json")
-            if os.path.exists(client_stats_file):
-                try:
-                    with open(client_stats_file) as f:
-                        client_stats = json.load(f)
-                        for k, v in client_stats.items():
-                            if isinstance(v, (int, float)):
-                                stats[k] = stats.get(k, 0) + v
-                except json.JSONDecodeError:
-                    print(f"Invalid JSON file {client_stats_file}")
-                if delete_files:
-                    os.remove(client_stats_file)
+                # Process client stats JSON
+                client_stats_file = os.path.join(client_dir, f"{client}-{k}-stats-{run}.json")
+                if os.path.exists(client_stats_file):
+                    try:
+                        with open(client_stats_file) as f:
+                            client_stats = json.load(f)
+                            for k, v in client_stats.items():
+                                if isinstance(v, (int, float)):
+                                    stats[k] = stats.get(k, 0) + v
+                    except json.JSONDecodeError:
+                        print(f"Invalid JSON file {client_stats_file}")
+                    if delete_files:
+                        os.remove(client_stats_file)
 
         # Process server stats
         for shard_idx, shard in enumerate(config["shards"]):
@@ -751,14 +750,6 @@ def generate_tput_lat_plot(config, plots_directory, plot_name, tputs, lats):
     run_gnuplot([plot_csv_file], os.path.join(plots_directory,
         '%s.png' % plot_name), plot_script_file)
 
-def generate_tput_lat_plot(config, plots_directory, plot_name, tputs, lats):
-    plot_csv_file = os.path.join(plots_directory, '%s.csv' % plot_name)
-    generate_csv_for_tput_lat_plot(plot_csv_file, tputs, lats)
-    plot_script_file = os.path.join(plots_directory, '%s.gpi' % plot_name)
-    generate_gnuplot_script_tput_lat(config, plot_script_file)
-    run_gnuplot([plot_csv_file], os.path.join(plots_directory,
-        '%s.png' % plot_name), plot_script_file)
-
 STATS_FILE = 'stats.json'
 
 def generate_tput_lat_plots(config, base_out_directory, exp_out_directories):
@@ -785,30 +776,6 @@ def generate_tput_lat_plots(config, base_out_directory, exp_out_directories):
         plot_name = 'tput-%s-lat' % lat_stat
         print(plots_directory)
         generate_tput_lat_plot(config, plots_directory, plot_name, tputs, lat)
-
-def generate_clientnum_lat_plots(config, base_out_directory, exp_out_directories):
-    plots_directory = os.path.join(base_out_directory, config['plot_directory_name'])
-    os.makedirs(plots_directory, exist_ok=True)
-    client_num = config["client_processes_per_client_node"]
-    lats = {}
-    for i in range(len(exp_out_directories)):
-        stats_file = os.path.join(exp_out_directories[i], STATS_FILE)
-        print(stats_file)
-        with open(stats_file) as f:
-            stats = json.load(f)
-            if 'combined' in stats['run_stats']:
-                combined_run_stats = stats['run_stats']['combined']
-                ignore = {'stddev': 1, 'var' : 1, 'tput': 1, 'ops': 1}
-                for lat_stat, lat in combined_run_stats.items():
-                    if lat_stat in ignore:
-                        continue
-                    if lat_stat not in lats:
-                        lats[lat_stat] = []
-                    lats[lat_stat].append(lat['p50']) # median of runs
-    for lat_stat, lat in lats.items():
-        plot_name = 'clientnum-%s-lat' % lat_stat
-        print(plots_directory)
-        generate_tput_lat_plot(config, plots_directory, plot_name, client_num, lat)
 
 def generate_agg_cdf_plots(config, base_out_directory, sub_out_directories):
     plots_directory = os.path.join(base_out_directory, config['plot_directory_name'])
@@ -1060,7 +1027,7 @@ def regenerate_plots(config_file, exp_dir, executor, calc_stats=True):
                     with open(os.path.join(sub_out_dir, STATS_FILE)) as f:
                         stats = json.load(f)
                 generate_cdf_plots(config_new_new, sub_out_dir, stats, executor)
-            generate_clientnum_lat_plots(config_new, out_dir, dirs)
+            generate_tput_lat_plots(config_new, out_dir, dirs)
         generate_agg_cdf_plots(config, exp_dir, sub_out_directories)
         generate_agg_tput_lat_plots(config, exp_dir, out_directories)
 

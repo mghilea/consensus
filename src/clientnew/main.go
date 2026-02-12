@@ -3,10 +3,8 @@ package main
 import (
 	"clients"
 	"dlog"
-	"fastrpc"
 	"flag"
 	"fmt"
-	"genericsmr"
 	"log"
 	"math/rand"
 	"os"
@@ -189,7 +187,7 @@ func createClient() clients.Client {
 			*epaxosMode)
 	case "epaxos":
 		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, true, make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE))
+			*statsFile, false, true)
 	case "mdl":
 		return clients.NewMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true, *singleShardAware)
@@ -198,7 +196,7 @@ func createClient() clients.Client {
 			*statsFile, false, false)
 	default:
 		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, false, make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE))
+			*statsFile, false, false)
 	}
 }
 

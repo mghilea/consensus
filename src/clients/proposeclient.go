@@ -3,8 +3,11 @@ package clients
 import (
 	"clientproto"
 	"fastrpc"
+	"fmt"
+	"genericsmr"
 	"genericsmrproto"
 	"state"
+	"time"
 )
 
 type ProposeClient struct {
@@ -17,10 +20,10 @@ type ProposeClient struct {
 }
 
 func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
-	fast bool, noLeader bool, replyChan chan fastrpc.Serializable) *ProposeClient {
+	fast bool, noLeader bool) *ProposeClient {
 	pc := &ProposeClient{
 		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile),
-		replyChan,                                                    // proposeReplyChan
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE), // proposeReplyChan
 		new(genericsmrproto.Propose),                                 // propose
 		0,                                                            // opCount
 		fast,                                                         // fast
@@ -35,65 +38,61 @@ func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader i
 	return pc
 }
 
-func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64){
-	// reqStart := time.Now()
+func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
 	for i, opType := range opTypes {
 		k := keys[i]
 
-		// before := time.Now()
-		// var opTypeStr string
-		// var success bool
+		before := time.Now()
+		var opTypeStr string
+		var success bool
 		if opType == state.GET {
-			// opTypeStr = "read"
-			c.Read(k)
+			opTypeStr = "read"
+			success, _ = c.Read(k)
 		} else if opType == state.PUT {
-			// opTypeStr = "write"
-			c.Write(k, int64(k))
+			opTypeStr = "write"
+			success = c.Write(k, int64(k))
 		} else {
-			// opTypeStr = "rmw"
-			c.CompareAndSwap(k, int64(k-1), int64(k))
+			opTypeStr = "rmw"
+			success, _ = c.CompareAndSwap(k, int64(k-1), int64(k))
 		}
-		// after := time.Now()s
+		after := time.Now()
 
-		// if !success {
-		// 	return false, -1
-		// 	// lat := after.Sub(before).Nanoseconds()
-		// 	// fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
-		// }
+		if success {
+			lat := after.Sub(before).Nanoseconds()
+			fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
+		} else {
+			return false, -1
+		}
 	}
-	
-	// reqEnd := time.Now()
-	// log.Printf("App request took %.2f seconds.", reqEnd.Sub(reqStart).Seconds())
+
 	return true, 0
 }
 
 func (c *ProposeClient) Read(key int64) (bool, int64) {
-	commandId := c.id * 1000 + c.opCount
+	commandId := c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, 0)
 	c.propose.Command.Op = state.GET
-	c.sendPropose()
-	return true, 0
+	return c.sendProposeAndReadReply()
 }
 
 func (c *ProposeClient) Write(key int64, value int64) bool {
-	commandId := c.id * 1000 + c.opCount
+	commandId := c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, value)
 	c.propose.Command.Op = state.PUT
-	c.sendPropose()
-	return true
+	success, _ := c.sendProposeAndReadReply()
+	return success
 }
 
 func (c *ProposeClient) CompareAndSwap(key int64, oldValue int64,
 	newValue int64) (bool, int64) {
-	commandId := c.id * 1000 + c.opCount
+	commandId := c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, newValue)
 	c.propose.Command.OldValue = state.Value(newValue)
 	c.propose.Command.Op = state.CAS
-	c.sendPropose()
-	return true, 0
+	return c.sendProposeAndReadReply()
 }
 
 func (c *ProposeClient) preparePropose(commandId int32, key int64, value int64) {
