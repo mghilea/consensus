@@ -76,7 +76,7 @@ class ShardingCodebase(ExperimentCodebase):
         client_command += ' '.join([str(x) for x in [
             path_to_client_bin,
             '-clientId', i,
-            '-clientProcs', k,
+            # '-clientProcs', k,
             '-expLength', config['client_experiment_length'],
             '-caddr', coordinator_host,
             '-cport', coordinator_port,
