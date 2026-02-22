@@ -282,7 +282,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 		}
 		
 		c.startTime = time.Now()
-		dlog.Printf("Client thread %d sending request for uniqueID %d at %v\n", threadId, c.id*1000 + c.opCount, c.startTime.UnixNano())
+		dlog.Printf("Client thread %d sending request for clientId %d and commandId %d at %v\n", threadId, c.id, c.opCount, c.startTime.UnixNano())
 		success, _ := c.client.AppRequest(opTypes, keys)
 		_ = success
 	}
@@ -303,7 +303,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 			c.opCount += 1
 			start := c.startTime
 			lat := int64(end.Sub(start).Nanoseconds())
-			dlog.Printf("Received response for CommandId %d at %v. Request latency is %d\n", resp.CommandId, end.UnixNano(), lat)
+			dlog.Printf("Received response for clientId %d and CommandId %d at %v. Request latency is %d\n", resp.ClientId, resp.CommandId, end.UnixNano(), lat)
 
 			elapsed := end.Sub(expStartTime)
 			if elapsed >= rampUpTime && elapsed < expEndTime {
@@ -334,7 +334,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 			}
 			
 			c.startTime = time.Now()
-			dlog.Printf("Client thread %d sending request %d for clientId %d at %v\n", threadId, c.opCount, c.id, c.startTime.UnixNano())
+			dlog.Printf("Client thread %d sending request for clientId %d op %d at %v\n", threadId, c.id, c.opCount, c.startTime.UnixNano())
 			success, _ := c.client.AppRequest(opTypes, keys)
 			_ = success
 		}

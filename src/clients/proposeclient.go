@@ -2,6 +2,7 @@ package clients
 
 import (
 	"clientproto"
+	"dlog"
 	"fastrpc"
 	"genericsmrproto"
 	"state"
@@ -142,7 +143,7 @@ func (c *ProposeClient) readProposeReply(commandId int32, clientId int32) (bool,
 		if reply.OK == 0 {
 			return false, 0
 		} else {
-			//dlog.Printf("Received ProposeReply for %d\n", reply.CommandId)
+			dlog.Printf("Received ProposeReply for clientId %d and commandId %d\n", reply.ClientId, reply.CommandId)
 			if commandId == reply.CommandId && clientId == reply.ClientId {
 				return true, int64(reply.Value)
 			}

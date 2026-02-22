@@ -358,6 +358,7 @@ func (t *ProposeReply) Marshal(wire io.Writer) {
 	bs[3] = byte(tmp32 >> 16)
 	bs[4] = byte(tmp32 >> 24)
 	wire.Write(bs)
+	bs = b[:4]
 	tmp32_2 := t.ClientId
 	bs[0] = byte(tmp32_2)
 	bs[1] = byte(tmp32_2 >> 8)
@@ -438,6 +439,7 @@ func (t *ProposeReplyTS) Marshal(wire io.Writer) {
 	bs[6] = byte(tmp64 >> 48)
 	bs[7] = byte(tmp64 >> 56)
 	wire.Write(bs)
+	bs = b[:4]
 	tmp32_2 := t.ClientId
 	bs[0] = byte(tmp32_2)
 	bs[1] = byte(tmp32_2 >> 8)
@@ -513,6 +515,7 @@ func (t *Read) Marshal(wire io.Writer) {
 	bs[3] = byte(tmp32 >> 24)
 	wire.Write(bs)
 	t.Key.Marshal(wire)
+	bs = b[:4]
 	tmp32_2 := t.ClientId
 	bs[0] = byte(tmp32_2)
 	bs[1] = byte(tmp32_2 >> 8)
@@ -581,6 +584,7 @@ func (t *ReadReply) Marshal(wire io.Writer) {
 	bs[3] = byte(tmp32 >> 24)
 	wire.Write(bs)
 	t.Value.Marshal(wire)
+	bs = b[:4]
 	tmp32_2 := t.ClientId
 	bs[0] = byte(tmp32_2)
 	bs[1] = byte(tmp32_2 >> 8)
@@ -650,6 +654,7 @@ func (t *ProposeAndReadReply) Marshal(wire io.Writer) {
 	bs[4] = byte(tmp32 >> 24)
 	wire.Write(bs)
 	t.Value.Marshal(wire)
+	bs = b[:4]
 	tmp32_2 := t.ClientId
 	bs[0] = byte(tmp32_2)
 	bs[1] = byte(tmp32_2 >> 8)
