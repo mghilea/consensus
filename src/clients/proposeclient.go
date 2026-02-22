@@ -68,18 +68,18 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (boo
 }
 
 func (c *ProposeClient) Read(key int64) (bool, int64) {
-	commandId := c.id * 1000 + c.opCount
+	commandId := c.opCount
 	c.opCount++
-	c.preparePropose(commandId, key, 0)
+	c.preparePropose(commandId, key, 0, c.id)
 	c.propose.Command.Op = state.GET
 	c.sendPropose()
 	return true, 0
 }
 
 func (c *ProposeClient) Write(key int64, value int64) bool {
-	commandId := c.id * 1000 + c.opCount
+	commandId := c.opCount
 	c.opCount++
-	c.preparePropose(commandId, key, value)
+	c.preparePropose(commandId, key, value, c.id)
 	c.propose.Command.Op = state.PUT
 	c.sendPropose()
 	return true
@@ -87,24 +87,25 @@ func (c *ProposeClient) Write(key int64, value int64) bool {
 
 func (c *ProposeClient) CompareAndSwap(key int64, oldValue int64,
 	newValue int64) (bool, int64) {
-	commandId := c.id * 1000 + c.opCount
+	commandId := c.opCount
 	c.opCount++
-	c.preparePropose(commandId, key, newValue)
+	c.preparePropose(commandId, key, newValue, c.id)
 	c.propose.Command.OldValue = state.Value(newValue)
 	c.propose.Command.Op = state.CAS
 	c.sendPropose()
 	return true, 0
 }
 
-func (c *ProposeClient) preparePropose(commandId int32, key int64, value int64) {
+func (c *ProposeClient) preparePropose(commandId int32, key int64, value int64, clientId int32) {
 	c.propose.CommandId = commandId
 	c.propose.Command.K = state.Key(key)
 	c.propose.Command.V = state.Value(value)
+	c.propose.ClientId = clientId
 }
 
 func (c *ProposeClient) sendProposeAndReadReply() (bool, int64) {
 	c.sendPropose()
-	return c.readProposeReply(c.propose.CommandId)
+	return c.readProposeReply(c.propose.CommandId, c.propose.ClientId)
 }
 
 func (c *ProposeClient) sendPropose() {
@@ -135,14 +136,14 @@ func (c *ProposeClient) sendPropose() {
 	}
 }
 
-func (c *ProposeClient) readProposeReply(commandId int32) (bool, int64) {
+func (c *ProposeClient) readProposeReply(commandId int32, clientId int32) (bool, int64) {
 	for !c.shutdown {
 		reply := (<-c.proposeReplyChan).(*genericsmrproto.ProposeReplyTS)
 		if reply.OK == 0 {
 			return false, 0
 		} else {
 			//dlog.Printf("Received ProposeReply for %d\n", reply.CommandId)
-			if commandId == reply.CommandId {
+			if commandId == reply.CommandId && clientId == reply.ClientId {
 				return true, int64(reply.Value)
 			}
 		}

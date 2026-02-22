@@ -441,7 +441,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
 	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)
 	if !r.IsLeader {
-		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL, 0}
+		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL, 0, propose.ClientId}
 		r.ReplyProposeTS(preply, propose.Reply)
 		return
 	}
@@ -703,7 +703,8 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 							TRUE,
 							inst.lb.clientProposals[i].CommandId,
 							state.NIL,
-							inst.lb.clientProposals[i].Timestamp}
+							inst.lb.clientProposals[i].Timestamp,
+							inst.lb.clientProposals[i].ClientId}
 						//dlog.Printf("Replying to client request after accept for commandId %d at timestamp %f\n", propreply.CommandId, time.Now().UnixNano())
 						r.ReplyProposeTS(propreply, inst.lb.clientProposals[i].Reply)
 					}
@@ -744,7 +745,8 @@ func (r *Replica) executeCommands() {
 							TRUE,
 							inst.lb.clientProposals[j].CommandId,
 							val,
-							inst.lb.clientProposals[j].Timestamp}
+							inst.lb.clientProposals[j].Timestamp,
+							inst.lb.clientProposals[j].ClientId}
 						//dlog.Printf("Replying to client request after execute for commandId %d at timestamp %f\n", propreply.CommandId, time.Now().UnixNano())
 						r.ReplyProposeTS(propreply, inst.lb.clientProposals[j].Reply)
 					}

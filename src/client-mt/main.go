@@ -236,7 +236,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
         initWg.Add(1)
         go func(idx int) {
             defer initWg.Done()
-			uniqueID := int32(*clientId * 100000 + startIdx + idx)
+			uniqueID := int32(*clientId * 1000000 + startIdx + idx)
             client := createClientWithID(uniqueID, replyChan)
 			r := rand.New(rand.NewSource(int64(uniqueID) + time.Now().UnixNano()))
 			zipf, _ := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
@@ -298,7 +298,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
         	resp := msg.(*genericsmrproto.ProposeReplyTS)
 			// If successful, record request latency
 			end := time.Now()
-			clientIdx := resp.CommandId / 1000 - int32(startIdx) - int32(*clientId*100000)
+			clientIdx := resp.ClientId - int32(startIdx) - int32(*clientId*1000000)
 			c := &clients[clientIdx]
 			c.opCount += 1
 			start := c.startTime
@@ -309,7 +309,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 			if elapsed >= rampUpTime && elapsed < expEndTime {
 				if resp.OK != 0 { 
 					count++
-					results <- Result{"app", lat, int32(startIdx) + clientIdx + int32(*clientId*100000), int32(c.opCount)}
+					results <- Result{"app", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), int32(c.opCount)}
 				}
 			}
 
@@ -334,7 +334,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 			}
 			
 			c.startTime = time.Now()
-			dlog.Printf("Client thread %d sending request for uniqueID %d at %v\n", threadId, c.id*1000 + c.opCount, c.startTime.UnixNano())
+			dlog.Printf("Client thread %d sending request %d for clientId %d at %v\n", threadId, c.opCount, c.id, c.startTime.UnixNano())
 			success, _ := c.client.AppRequest(opTypes, keys)
 			_ = success
 		}

@@ -800,7 +800,7 @@ func (r *Replica) updateBlocking(instance int32) {
 				if inst.lb.clientProposal != nil && !r.NeedsWaitForExecute(inst.command) {
 					// give client the all clear
 					dlog.Printf("Sending ACK for req. %d\n", inst.lb.clientProposal.CommandId)
-					r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, inst.lb.clientProposal.CommandId, state.NIL, inst.lb.clientProposal.Timestamp},
+					r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, inst.lb.clientProposal.CommandId, state.NIL, inst.lb.clientProposal.Timestamp, inst.lb.clientProposal.ClientId},
 						inst.lb.clientProposal.Reply)
 				}
 				skip := FALSE
@@ -888,7 +888,7 @@ func (r *Replica) executeCommands() {
 
 			if r.NeedsWaitForExecute(inst.command) && inst.lb != nil && inst.lb.clientProposal != nil {
 				dlog.Printf("Sending ACK for req. %d\n", inst.lb.clientProposal.CommandId)
-				r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, inst.lb.clientProposal.CommandId, state.NIL, inst.lb.clientProposal.Timestamp},
+				r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, inst.lb.clientProposal.CommandId, state.NIL, inst.lb.clientProposal.Timestamp, inst.lb.clientProposal.ClientId},
 					inst.lb.clientProposal.Reply)
 			}
 			inst.status = EXECUTED

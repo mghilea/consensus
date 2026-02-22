@@ -145,7 +145,8 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 							TRUE,
 							w.lb.clientProposals[idx].CommandId,
 							val,
-							w.lb.clientProposals[idx].Timestamp},
+							w.lb.clientProposals[idx].Timestamp,
+							w.lb.clientProposals[idx].ClientId},
 						w.lb.clientProposals[idx].Reply)
 				}
 			}

@@ -478,7 +478,7 @@ func (e *EPaxosRMWHandler) HandleRMW(rmw *gryffproto.RMW) {
         rmw.OldValue,
       },
       0,
-    },
+      rmw.ClientId},
     e.R.GetClientWriter(rmw.ClientId),
   }
   e.handlePropose(propose)
@@ -1329,7 +1329,8 @@ func (e *EPaxosRMWHandler) handlePreAcceptReply(pareply *gryffproto.PreAcceptRep
               TRUE,
               inst.lb.clientProposals[i].CommandId,
               state.NIL,
-              inst.lb.clientProposals[i].Timestamp},
+              inst.lb.clientProposals[i].Timestamp,
+              inst.lb.clientProposals[i].ClientId},
             inst.lb.clientProposals[i].Reply)
         }
       }
@@ -1458,7 +1459,8 @@ func (e *EPaxosRMWHandler) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
               TRUE,
               inst.lb.clientProposals[i].CommandId,
               state.NIL,
-              inst.lb.clientProposals[i].Timestamp},
+              inst.lb.clientProposals[i].Timestamp,
+              inst.lb.clientProposals[i].ClientId},
             inst.lb.clientProposals[i].Reply)
         }
       }
@@ -1610,7 +1612,8 @@ func (e *EPaxosRMWHandler) handleAcceptReply(areply *epaxosproto.AcceptReply) {
               TRUE,
               inst.lb.clientProposals[i].CommandId,
               state.NIL,
-              inst.lb.clientProposals[i].Timestamp},
+              inst.lb.clientProposals[i].Timestamp,
+              inst.lb.clientProposals[i].ClientId},
             inst.lb.clientProposals[i].Reply)
         }
       }

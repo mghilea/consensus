@@ -50,6 +50,13 @@ func (t *ProposeAndRead) Marshal(wire io.Writer) {
 	wire.Write(bs)
 	t.Command.Marshal(wire)
 	t.Key.Marshal(wire)
+	bs = b[:4]
+	tmp32_2 := t.ClientId
+	bs[0] = byte(tmp32_2)
+	bs[1] = byte(tmp32_2 >> 8)
+	bs[2] = byte(tmp32_2 >> 16)
+	bs[3] = byte(tmp32_2 >> 24)
+	wire.Write(bs)
 }
 
 func (t *ProposeAndRead) Unmarshal(wire io.Reader) error {
@@ -62,6 +69,10 @@ func (t *ProposeAndRead) Unmarshal(wire io.Reader) error {
 	t.CommandId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	t.Command.Unmarshal(wire)
 	t.Key.Unmarshal(wire)
+	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+		return err
+	}
+	t.ClientId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	return nil
 }
 
@@ -272,6 +283,13 @@ func (t *Propose) Marshal(wire io.Writer) {
 	bs[6] = byte(tmp64 >> 48)
 	bs[7] = byte(tmp64 >> 56)
 	wire.Write(bs)
+	bs = b[:4]
+	tmp32_2 := t.ClientId
+	bs[0] = byte(tmp32_2)
+	bs[1] = byte(tmp32_2 >> 8)
+	bs[2] = byte(tmp32_2 >> 16)
+	bs[3] = byte(tmp32_2 >> 24)
+	wire.Write(bs)
 }
 
 func (t *Propose) Unmarshal(wire io.Reader) error {
@@ -288,6 +306,11 @@ func (t *Propose) Unmarshal(wire io.Reader) error {
 		return err
 	}
 	t.Timestamp = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+	bs = b[:4]
+	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+		return err
+	}
+	t.ClientId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	return nil
 }
 
@@ -335,6 +358,12 @@ func (t *ProposeReply) Marshal(wire io.Writer) {
 	bs[3] = byte(tmp32 >> 16)
 	bs[4] = byte(tmp32 >> 24)
 	wire.Write(bs)
+	tmp32_2 := t.ClientId
+	bs[0] = byte(tmp32_2)
+	bs[1] = byte(tmp32_2 >> 8)
+	bs[2] = byte(tmp32_2 >> 16)
+	bs[3] = byte(tmp32_2 >> 24)
+	wire.Write(bs)
 }
 
 func (t *ProposeReply) Unmarshal(wire io.Reader) error {
@@ -346,6 +375,10 @@ func (t *ProposeReply) Unmarshal(wire io.Reader) error {
 	}
 	t.OK = uint8(bs[0])
 	t.CommandId = int32((uint32(bs[1]) | (uint32(bs[2]) << 8) | (uint32(bs[3]) << 16) | (uint32(bs[4]) << 24)))
+	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+		return err
+	}
+	t.ClientId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	return nil
 }
 
@@ -405,6 +438,12 @@ func (t *ProposeReplyTS) Marshal(wire io.Writer) {
 	bs[6] = byte(tmp64 >> 48)
 	bs[7] = byte(tmp64 >> 56)
 	wire.Write(bs)
+	tmp32_2 := t.ClientId
+	bs[0] = byte(tmp32_2)
+	bs[1] = byte(tmp32_2 >> 8)
+	bs[2] = byte(tmp32_2 >> 16)
+	bs[3] = byte(tmp32_2 >> 24)
+	wire.Write(bs)
 }
 
 func (t *ProposeReplyTS) Unmarshal(wire io.Reader) error {
@@ -422,6 +461,11 @@ func (t *ProposeReplyTS) Unmarshal(wire io.Reader) error {
 		return err
 	}
 	t.Timestamp = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+	bs = b[:4]
+	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+		return err
+	}
+	t.ClientId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	return nil
 }
 
@@ -469,6 +513,12 @@ func (t *Read) Marshal(wire io.Writer) {
 	bs[3] = byte(tmp32 >> 24)
 	wire.Write(bs)
 	t.Key.Marshal(wire)
+	tmp32_2 := t.ClientId
+	bs[0] = byte(tmp32_2)
+	bs[1] = byte(tmp32_2 >> 8)
+	bs[2] = byte(tmp32_2 >> 16)
+	bs[3] = byte(tmp32_2 >> 24)
+	wire.Write(bs)
 }
 
 func (t *Read) Unmarshal(wire io.Reader) error {
@@ -480,6 +530,10 @@ func (t *Read) Unmarshal(wire io.Reader) error {
 	}
 	t.CommandId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	t.Key.Unmarshal(wire)
+	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+		return err
+	}
+	t.ClientId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	return nil
 }
 
@@ -527,6 +581,12 @@ func (t *ReadReply) Marshal(wire io.Writer) {
 	bs[3] = byte(tmp32 >> 24)
 	wire.Write(bs)
 	t.Value.Marshal(wire)
+	tmp32_2 := t.ClientId
+	bs[0] = byte(tmp32_2)
+	bs[1] = byte(tmp32_2 >> 8)
+	bs[2] = byte(tmp32_2 >> 16)
+	bs[3] = byte(tmp32_2 >> 24)
+	wire.Write(bs)
 }
 
 func (t *ReadReply) Unmarshal(wire io.Reader) error {
@@ -538,6 +598,10 @@ func (t *ReadReply) Unmarshal(wire io.Reader) error {
 	}
 	t.CommandId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	t.Value.Unmarshal(wire)
+	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+		return err
+	}
+	t.ClientId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	return nil
 }
 
@@ -586,6 +650,12 @@ func (t *ProposeAndReadReply) Marshal(wire io.Writer) {
 	bs[4] = byte(tmp32 >> 24)
 	wire.Write(bs)
 	t.Value.Marshal(wire)
+	tmp32_2 := t.ClientId
+	bs[0] = byte(tmp32_2)
+	bs[1] = byte(tmp32_2 >> 8)
+	bs[2] = byte(tmp32_2 >> 16)
+	bs[3] = byte(tmp32_2 >> 24)
+	wire.Write(bs)
 }
 
 func (t *ProposeAndReadReply) Unmarshal(wire io.Reader) error {
@@ -598,6 +668,10 @@ func (t *ProposeAndReadReply) Unmarshal(wire io.Reader) error {
 	t.OK = uint8(bs[0])
 	t.CommandId = int32((uint32(bs[1]) | (uint32(bs[2]) << 8) | (uint32(bs[3]) << 16) | (uint32(bs[4]) << 24)))
 	t.Value.Unmarshal(wire)
+	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+		return err
+	}
+	t.ClientId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	return nil
 }
 

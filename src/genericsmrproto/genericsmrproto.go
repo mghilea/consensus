@@ -9,11 +9,13 @@ type Propose struct {
 	CommandId int32
 	Command   state.Command
 	Timestamp int64
+	ClientId  int32
 }
 
 type ProposeReply struct {
 	OK        uint8
 	CommandId int32
+	ClientId  int32
 }
 
 type ProposeReplyTS struct {
@@ -21,28 +23,33 @@ type ProposeReplyTS struct {
 	CommandId int32
 	Value     state.Value
 	Timestamp int64
+	ClientId  int32
 }
 
 type Read struct {
 	CommandId int32
 	Key       state.Key
+	ClientId  int32
 }
 
 type ReadReply struct {
 	CommandId int32
 	Value     state.Value
+	ClientId  int32
 }
 
 type ProposeAndRead struct {
 	CommandId int32
 	Command   state.Command
 	Key       state.Key
+	ClientId  int32
 }
 
 type ProposeAndReadReply struct {
 	OK        uint8
 	CommandId int32
 	Value     state.Value
+	ClientId  int32
 }
 
 // handling stalls and failures
