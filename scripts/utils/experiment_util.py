@@ -431,8 +431,8 @@ def collect_and_calculate(config, client_config_idx, remote_exp_directory, local
         collect_exp_data(config, remote_exp_directory, local_out_directory, executor)
 
     # Stream and aggregate logs immediately, deleting files after processing if debug mode is off
-    # should_delete_files = 'client_debug_output' not in config or config['client_debug_output'] == False
-    should_delete_files=False
+    should_delete_files = 'client_debug_output' not in config or config['client_debug_output'] == False
+    # should_delete_files=False
     stats, op_latencies = calculate_statistics(config, local_out_directory, delete_files=should_delete_files)
 
     generate_cdf_plots(config, local_out_directory, stats, executor)

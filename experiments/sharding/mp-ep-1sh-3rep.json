@@ -24,9 +24,84 @@
       "us-west-1-0",
       "eu-west-1-0"
   ],
-  "num_shards": 1,
+  "num_shards": 16,
   "shards": [
         [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
       "us-east-1-0",
       "us-west-1-0",
       "eu-west-1-0"
@@ -65,12 +140,12 @@
       }
   },
  "client_total": [
-    [20],
-    [20]
+    [32, 64, 128, 200, 256, 300, 350, 400],
+    [32, 64, 128, 200, 256, 300, 350, 400]
   ],
   "client_processes_per_client_node": [
-    [20],
-    [20]
+    [32, 64, 128, 200, 256, 300, 350, 400],
+    [32, 64, 128, 200, 256, 300, 350, 400]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -135,12 +210,12 @@
   "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
   "client_bin_name": "client-mt",
-  "client_debug_output": true,
+  "client_debug_output": false,
   "client_experiment_length": 90,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 16,
-  "server_max_processors": 1,
+  "server_max_processors": 16,
   "client_num_keys": 1000000,
   "client_ramp_down": 30,
   "client_ramp_up": 30,
@@ -165,7 +240,7 @@
   "server_bin_name": "server",
   "server_cpuprofile": false,
   "server_blockprofile": false,
-  "server_debug_output": true,
+  "server_debug_output": false,
   "server_durable": false,
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
