@@ -1123,6 +1123,7 @@ def regenerate_plots(config_file, exp_dir, executor, calc_stats=True):
                     with open(os.path.join(sub_out_dir, STATS_FILE)) as f:
                         stats = json.load(f)
                 generate_cdf_plots(config_new_new, sub_out_dir, stats, executor)
+                print("Generating tput over time plot in: ", sub_out_dir)
                 generate_tput_over_time_plot(config_new_new, sub_out_dir,
                              stats)
             generate_clientnum_lat_plots(config_new, out_dir, dirs)
