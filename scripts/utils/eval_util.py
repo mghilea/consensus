@@ -266,7 +266,6 @@ def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_la
     for op, region_lats_list in region_op_latencies.items():
         total_latencies = sum((len(lats) for lats in region_lats_list))
         region_times_list = region_op_times[op]
-        print("Region times list: ", region_times_list)
 
         # Process per region
         for i, region_lats in enumerate(region_lats_list):
@@ -275,6 +274,7 @@ def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_la
                 stats[region_key] = {}
 
             # Compute per-region stats
+            print("Region times list: ", region_times_list[i])
             calculate_op_statistics(config, stats[region_key], total_recorded_time, op, region_lats, [], region_times_list[i])
 
         # Compute combined statistics across regions
