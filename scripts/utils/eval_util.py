@@ -129,7 +129,7 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
                             opTime = float(opCols[x+3])
                             op_latencies[op].append(opVal)
                             op_latency_counts[op] += 1
-                            op_times[op].append(opVal)
+                            op_times[op].append(opTime)
                             if op not in combine_blacklist:
                                 op_latencies['combined'].append(opVal)
                                 op_latency_counts['combined'] += 1

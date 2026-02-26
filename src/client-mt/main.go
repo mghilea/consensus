@@ -310,8 +310,11 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 			if elapsed >= rampUpTime && elapsed < expEndTime {
 				if resp.OK != 0 { 
 					count++
+					results <- Result{"write", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), int32(c.opCount), time.Now().UnixNano()}
 					results <- Result{"app", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), int32(c.opCount), time.Now().UnixNano()}
 				}
+			} else {
+				results <- Result{"write", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), int32(c.opCount), time.Now().UnixNano()}
 			}
 
 			// Send the next request on the same client
