@@ -373,7 +373,7 @@ func main() {
 		defer writer.Flush()
 
 		for r := range results {
-			fmt.Fprintf(writer, "%s,%d,%d,%d\n", r.op, r.lat, r.key, r.cnt)
+			fmt.Fprintf(writer, "%s,%d,%d,%d,%d\n", r.op, r.lat, r.key, r.cnt, r.time)
 		}
 	}()
 
