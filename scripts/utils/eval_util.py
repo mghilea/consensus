@@ -450,6 +450,11 @@ def generate_plots(config, base_out_directory, out_dirs):
                         if not csv_class in csv_files[i]:
                             csv_files[i][csv_class] = []
                         csv_files[i][csv_class].append(os.path.join(sub_plot_directory, f))
+                stats_file = os.path.join(collecting[0], config['stats_file_name'])
+                with open(stats_file) as f:
+                    stats = json.load(f)
+                generate_tput_over_time_plot(config, sub_plot_directory,
+                             stats)
             else:
                 for od in collecting[0]:
                     collecting.append(od)
@@ -1123,9 +1128,6 @@ def regenerate_plots(config_file, exp_dir, executor, calc_stats=True):
                     with open(os.path.join(sub_out_dir, STATS_FILE)) as f:
                         stats = json.load(f)
                 generate_cdf_plots(config_new_new, sub_out_dir, stats, executor)
-                print("Generating tput over time plot in: ", sub_out_dir)
-                generate_tput_over_time_plot(config_new_new, sub_out_dir,
-                             stats)
             generate_clientnum_lat_plots(config_new, out_dir, dirs)
         generate_agg_cdf_plots(config, exp_dir, sub_out_directories)
         generate_agg_tput_lat_plots(config, exp_dir, out_directories)
