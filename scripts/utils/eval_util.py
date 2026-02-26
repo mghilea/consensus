@@ -243,7 +243,7 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
             stats['%s_norm' % op_type] = calculate_statistics_for_data(norm_latencies)
             stats['%s_norm' % op_type]['samples'] = len(norm_latencies)
         seconds = [ts // 1e9 for ts in times]
-        counts = Counter(seconds)
+        counts = collections.Counter(seconds)
         min_sec = min(seconds)
         max_sec = max(seconds)
         tput_over_time = [counts.get(sec, 0) for sec in range(min_sec, max_sec + 1)]
