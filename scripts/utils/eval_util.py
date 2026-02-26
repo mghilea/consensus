@@ -126,7 +126,7 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
                             if op.isdigit() or op in blacklist:
                                 continue
                             opVal = float(opCols[x+1]) / input_scale * output_scale
-                            opTime = float(opCols[x+3])
+                            opTime = float(opCols[x+4])
                             op_latencies[op].append(opVal)
                             op_latency_counts[op] += 1
                             op_times[op].append(opTime)
@@ -231,7 +231,6 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
     #     stats['abort_rate'] = 1 - stats['commit_rate']
 
     calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts, region_op_times)
-    print("Region op times: ", region_op_times)
     return stats, region_op_latencies, region_op_latency_counts , region_op_times
 
 
@@ -274,7 +273,6 @@ def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_la
                 stats[region_key] = {}
 
             # Compute per-region stats
-            print("Region times list: ", region_times_list[i])
             calculate_op_statistics(config, stats[region_key], total_recorded_time, op, region_lats, [], region_times_list[i])
 
         # Compute combined statistics across regions
