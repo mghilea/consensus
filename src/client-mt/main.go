@@ -189,6 +189,7 @@ type Result struct {
 	lat  int64
 	key  int32
 	cnt  int32
+	time int64
 }
 
 type ClientJob struct {
@@ -309,7 +310,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 			if elapsed >= rampUpTime && elapsed < expEndTime {
 				if resp.OK != 0 { 
 					count++
-					results <- Result{"app", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), int32(c.opCount)}
+					results <- Result{"app", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), int32(c.opCount), time.Now().UnixNano()}
 				}
 			}
 

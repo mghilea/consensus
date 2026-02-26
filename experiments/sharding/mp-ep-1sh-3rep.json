@@ -24,91 +24,18 @@
       "us-west-1-0",
       "eu-west-1-0"
   ],
-  "num_shards": 16,
+  "num_shards": 1,
   "shards": [
         [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
       "us-east-1-0",
       "us-west-1-0",
       "eu-west-1-0"
     ]
   ],
   "clients": [
-	  "client-0-0"
+	  "client-0-0",
+    "client-0-1",
+    "client-0-2"
   ],
   "server_regions": {
     "virginia": [
@@ -116,10 +43,12 @@
       "client-0-0"
     ],
     "california": [
-      "us-west-1-0"
+      "us-west-1-0",
+      "client-0-1"
     ],
     "ireland": [
-      "eu-west-1-0"
+      "eu-west-1-0",
+      "client-0-2"
     ]
   },
   "region_rtt_latencies": {
@@ -140,12 +69,12 @@
       }
   },
  "client_total": [
-    [32, 64, 128, 200, 256, 300, 350, 400],
-    [32, 64, 128, 200, 256, 300, 350, 400]
+    [3, 6, 12, 24, 48],
+    [3, 6, 12, 24, 48]
   ],
   "client_processes_per_client_node": [
-    [32, 64, 128, 200, 256, 300, 350, 400],
-    [32, 64, 128, 200, 256, 300, 350, 400]
+    [1, 2, 4, 8, 16],
+    [1, 2, 4, 8, 16]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -215,7 +144,7 @@
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 16,
-  "server_max_processors": 16,
+  "server_max_processors": 1,
   "client_num_keys": 1000000,
   "client_ramp_down": 30,
   "client_ramp_up": 30,

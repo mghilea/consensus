@@ -87,6 +87,7 @@ def calculate_statistics(config, local_out_directory, delete_files=True):
 def calculate_statistics_for_run(config, local_out_directory, run, delete_files=True):
     region_op_latencies = {}
     region_op_latency_counts = {}
+    region_op_times = {}
 
     stats = {}
 
@@ -99,6 +100,7 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
     for region in regions:
         op_latencies = collections.defaultdict(list)
         op_latency_counts = collections.defaultdict(int)
+        op_times = collections.defaultdict(list)
 
         # Process client stats
         for client in config["clients"]:
@@ -121,11 +123,14 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
                             if op.isdigit() or op in blacklist:
                                 continue
                             opVal = float(opCols[x+1]) / input_scale * output_scale
+                            opTime = float(opCols[x+3])
                             op_latencies[op].append(opVal)
                             op_latency_counts[op] += 1
+                            op_times[op].append(opVal)
                             if op not in combine_blacklist:
                                 op_latencies['combined'].append(opVal)
                                 op_latency_counts['combined'] += 1
+                                op_times['combined'].append(opTime)
 
                 # Remove file that was just processed if debug mode is off                
                 if delete_files:
@@ -168,6 +173,8 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
         # Merge region stats
         for k, v in op_latencies.items():
             region_op_latencies.setdefault(k, []).append(v)
+        for k, v in op_times.items():
+            region_op_times.setdefault(k, []).append(v)
         for k, v in op_latency_counts.items():
             if k in region_op_latency_counts:
                 region_op_latency_counts[k] = min(region_op_latency_counts[k], v)
@@ -220,11 +227,11 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
     #     stats['commit_rate'] = total_committed / total_attempts
     #     stats['abort_rate'] = 1 - stats['commit_rate']
 
-    calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts)
-    return stats, region_op_latencies, region_op_latency_counts 
+    calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts, region_op_times)
+    return stats, region_op_latencies, region_op_latency_counts , region_op_times
 
 
-def calculate_op_statistics(config, stats, total_recorded_time, op_type, latencies, norm_latencies):
+def calculate_op_statistics(config, stats, total_recorded_time, op_type, latencies, norm_latencies, times):
     if len(latencies) > 0:
         stats[op_type] = calculate_statistics_for_data(latencies)
         stats[op_type]['ops'] = len(latencies)
@@ -235,14 +242,23 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
         if (not 'server_emulate_wan' in config or config['server_emulate_wan']) and len(norm_latencies) > 0:
             stats['%s_norm' % op_type] = calculate_statistics_for_data(norm_latencies)
             stats['%s_norm' % op_type]['samples'] = len(norm_latencies)
+        seconds = [ts // 1e9 for ts in timestamps]
+        counts = Counter(seconds)
+        min_sec = min(seconds)
+        max_sec = max(seconds)
+        tput_over_time = [counts.get(sec, 0) for sec in range(min_sec, max_sec + 1)]
+        stats[op_type]['tput_over_time'] = tput_over_time
 
-def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts):
+
+
+def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts, region_op_times):
     total_recorded_time = float(config['client_experiment_length'] -
                                 config['client_ramp_up'] -
                                 config['client_ramp_down'])
 
     for op, region_lats_list in region_op_latencies.items():
         total_latencies = sum((len(lats) for lats in region_lats_list))
+        region_times_list = region_op_times[op]
 
         # Process per region
         for i, region_lats in enumerate(region_lats_list):
@@ -251,7 +267,7 @@ def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_la
                 stats[region_key] = {}
 
             # Compute per-region stats
-            calculate_op_statistics(config, stats[region_key], total_recorded_time, op, region_lats, [])
+            calculate_op_statistics(config, stats[region_key], total_recorded_time, op, region_lats, [], region_times_list[i])
 
         # Compute combined statistics across regions
         norm_latencies = []
@@ -262,7 +278,8 @@ def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_la
 
         # Aggregate across all regions
         all_latencies = [lat for region_lats in region_lats_list for lat in region_lats]
-        calculate_op_statistics(config, stats, total_recorded_time, op, all_latencies, norm_latencies)
+        all_times = [t for region_times in region_times_list for t in region_times]
+        calculate_op_statistics(config, stats, total_recorded_time, op, all_latencies, norm_latencies, all_times)
 
 
 def calculate_cdf_for_npdata(npdata):
