@@ -251,6 +251,9 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
         max_sec = max(seconds)
         tput_over_time = [counts.get(sec, 0) for sec in range(min_sec, max_sec + 1)]
         stats[op_type]['tput_over_time'] = tput_over_time
+        print("Unique seconds:", sorted(set(seconds)))
+        print("Number of unique seconds:", len(set(seconds)))
+        print("Buckets:", collections.Counter(seconds))
 
 
 
