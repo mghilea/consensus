@@ -31,10 +31,11 @@ def calculate_statistics(config, local_out_directory, delete_files=True):
     runs = []
     op_latencies = collections.defaultdict(list)
     op_latency_counts = collections.defaultdict(int)
+    op_times = collections.defaultdict(list)
 
     for i in range(config['num_experiment_runs']):
         # Stream and aggregate logs for a single run
-        stats_run, run_op_latencies, run_op_latency_counts = calculate_statistics_for_run(
+        stats_run, run_op_latencies, run_op_latency_counts, run_op_times = calculate_statistics_for_run(
             config, local_out_directory, i, delete_files=delete_files
         )
         runs.append(stats_run)
@@ -44,6 +45,8 @@ def calculate_statistics(config, local_out_directory, delete_files=True):
             op_latencies[k].extend(v_list)
         for k, count in run_op_latency_counts.items():
             op_latency_counts[k] += count
+        for k, v_list in run_op_times.items():
+            op_times[k].extend(v_list)
 
     # Compute final aggregated stats
     stats = {'aggregate': {}}
