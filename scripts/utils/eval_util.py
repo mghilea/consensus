@@ -634,7 +634,8 @@ def generate_csv_for_tput_over_time(csv_file, tput_over_time):
 def generate_gnuplot_script_tput_over_time(config, script_file):
     with open(script_file, 'w') as f:
         write_gpi_header(f)
-        f.write("set key top left\n")
+        f.write("set title 'Throughput (ops) over time (s)'\n")
+        f.write("set key off\n")
         f.write("set xlabel 'Time (seconds)'\n")
         f.write("set ylabel 'Throughput (ops/sec)'\n")
         f.write("set terminal pngcairo size %d,%d enhanced font '%s'\n" %
@@ -643,7 +644,7 @@ def generate_gnuplot_script_tput_over_time(config, script_file):
                  config['plot_cdf_png_font']))
         f.write("set output outfile\n")
         write_line_styles(f)
-        f.write("plot datafile0 title 'tput over time' with linespoints\n")
+        f.write("plot datafile0 with linespoints notitle\n")
 
 def generate_tput_over_time_plot(config, plots_directory, stats):
     os.makedirs(plots_directory, exist_ok=True)
