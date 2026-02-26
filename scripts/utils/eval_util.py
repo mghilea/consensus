@@ -50,7 +50,7 @@ def calculate_statistics(config, local_out_directory, delete_files=True):
 
     # Compute final aggregated stats
     stats = {'aggregate': {}}
-    calculate_all_op_statistics(config, stats['aggregate'], op_latencies, op_latency_counts)
+    calculate_all_op_statistics(config, stats['aggregate'], op_latencies, op_latency_counts, op_times)
 
 
     # Compute per-run statistics for easier plotting/analysis
