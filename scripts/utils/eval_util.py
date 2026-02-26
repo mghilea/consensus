@@ -251,9 +251,6 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
         max_sec = max(seconds)
         tput_over_time = [counts.get(sec, 0) for sec in range(min_sec, max_sec + 1)]
         stats[op_type]['tput_over_time'] = tput_over_time
-        print("Unique seconds:", sorted(set(seconds)))
-        print("Number of unique seconds:", len(set(seconds)))
-        print("Buckets:", collections.Counter(seconds))
 
 
 
@@ -622,6 +619,49 @@ def generate_cdf_plot(config, plots_directory, plot_name, cdf_data):
     generate_gnuplot_script_cdf(config, plot_script_file)
     run_gnuplot([plot_csv_file], os.path.join(plots_directory, '%s.png' % plot_name),
         plot_script_file)
+
+def generate_csv_for_tput_over_time(csv_file, tput_over_time):
+    with open(csv_file, 'w') as f:
+        writer = csv.writer(f)
+        for sec, tput in enumerate(tput_over_time):
+            writer.writerow([sec, tput])
+
+def generate_gnuplot_script_tput_over_time(config, script_file):
+    with open(script_file, 'w') as f:
+        write_gpi_header(f)
+        f.write("set key top left\n")
+        f.write("set xlabel 'Time (seconds)'\n")
+        f.write("set ylabel 'Throughput (ops/sec)'\n")
+        f.write("set terminal pngcairo size %d,%d enhanced font '%s'\n" %
+                (config['plot_cdf_png_width'],
+                 config['plot_cdf_png_height'],
+                 config['plot_cdf_png_font']))
+        f.write("set output outfile\n")
+        write_line_styles(f)
+        f.write("plot datafile0 title 'tput over time' with linespoints\n")
+
+def generate_tput_over_time_plot(config, plots_directory, stats):
+    os.makedirs(plots_directory, exist_ok=True)
+
+    if 'aggregate' not in stats:
+        return
+
+    if 'write' not in stats['aggregate']:
+        return
+
+    tput_series = stats['aggregate']['write'].get('tput_over_time', [])
+    if not tput_series:
+        return
+
+    plot_name = "tput-over-time"
+    csv_file = os.path.join(plots_directory, f"{plot_name}.csv")
+    script_file = os.path.join(plots_directory, f"{plot_name}.gpi")
+    png_file = os.path.join(plots_directory, f"{plot_name}.png")
+
+    generate_csv_for_tput_over_time(csv_file, tput_series)
+    generate_gnuplot_script_tput_over_time(config, script_file)
+
+    run_gnuplot([csv_file], png_file, script_file)
 
 def generate_gnuplot_script_lot(config, script_file):
     with open(script_file, 'w') as f:
@@ -1083,6 +1123,8 @@ def regenerate_plots(config_file, exp_dir, executor, calc_stats=True):
                     with open(os.path.join(sub_out_dir, STATS_FILE)) as f:
                         stats = json.load(f)
                 generate_cdf_plots(config_new_new, sub_out_dir, stats, executor)
+                generate_tput_over_time_plot(config_new_new, sub_out_dir,
+                             stats)
             generate_clientnum_lat_plots(config_new, out_dir, dirs)
         generate_agg_cdf_plots(config, exp_dir, sub_out_directories)
         generate_agg_tput_lat_plots(config, exp_dir, out_directories)
