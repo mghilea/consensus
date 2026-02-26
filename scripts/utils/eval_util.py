@@ -31,10 +31,11 @@ def calculate_statistics(config, local_out_directory, delete_files=True):
     runs = []
     op_latencies = collections.defaultdict(list)
     op_latency_counts = collections.defaultdict(int)
+    op_times = collections.defaultdict(list)
 
     for i in range(config['num_experiment_runs']):
         # Stream and aggregate logs for a single run
-        stats_run, run_op_latencies, run_op_latency_counts = calculate_statistics_for_run(
+        stats_run, run_op_latencies, run_op_latency_counts, run_op_times = calculate_statistics_for_run(
             config, local_out_directory, i, delete_files=delete_files
         )
         runs.append(stats_run)
@@ -44,16 +45,18 @@ def calculate_statistics(config, local_out_directory, delete_files=True):
             op_latencies[k].extend(v_list)
         for k, count in run_op_latency_counts.items():
             op_latency_counts[k] += count
+        for k, v_list in run_op_times.items():
+            op_times[k].extend(v_list)
 
     # Compute final aggregated stats
     stats = {'aggregate': {}}
-    calculate_all_op_statistics(config, stats['aggregate'], op_latencies, op_latency_counts)
+    calculate_all_op_statistics(config, stats['aggregate'], op_latencies, op_latency_counts, op_times)
 
 
     # Compute per-run statistics for easier plotting/analysis
     stats['runs'] = runs
     stats['run_stats'] = {}
-    ignored = {'cdf', 'cdf_log', 'time'}
+    ignored = {'cdf', 'cdf_log', 'time', 'tput_over_time'}
 
     # Loop over first run keys to structure stats
     first_run = runs[0] if runs else {}
@@ -87,6 +90,7 @@ def calculate_statistics(config, local_out_directory, delete_files=True):
 def calculate_statistics_for_run(config, local_out_directory, run, delete_files=True):
     region_op_latencies = {}
     region_op_latency_counts = {}
+    region_op_times = {}
 
     stats = {}
 
@@ -99,6 +103,7 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
     for region in regions:
         op_latencies = collections.defaultdict(list)
         op_latency_counts = collections.defaultdict(int)
+        op_times = collections.defaultdict(list)
 
         # Process client stats
         for client in config["clients"]:
@@ -121,11 +126,14 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
                             if op.isdigit() or op in blacklist:
                                 continue
                             opVal = float(opCols[x+1]) / input_scale * output_scale
+                            opTime = float(opCols[x+4])
                             op_latencies[op].append(opVal)
                             op_latency_counts[op] += 1
+                            op_times[op].append(opTime)
                             if op not in combine_blacklist:
                                 op_latencies['combined'].append(opVal)
                                 op_latency_counts['combined'] += 1
+                                op_times['combined'].append(opTime)
 
                 # Remove file that was just processed if debug mode is off                
                 if delete_files:
@@ -168,6 +176,8 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
         # Merge region stats
         for k, v in op_latencies.items():
             region_op_latencies.setdefault(k, []).append(v)
+        for k, v in op_times.items():
+            region_op_times.setdefault(k, []).append(v)
         for k, v in op_latency_counts.items():
             if k in region_op_latency_counts:
                 region_op_latency_counts[k] = min(region_op_latency_counts[k], v)
@@ -220,11 +230,11 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
     #     stats['commit_rate'] = total_committed / total_attempts
     #     stats['abort_rate'] = 1 - stats['commit_rate']
 
-    calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts)
-    return stats, region_op_latencies, region_op_latency_counts 
+    calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts, region_op_times)
+    return stats, region_op_latencies, region_op_latency_counts , region_op_times
 
 
-def calculate_op_statistics(config, stats, total_recorded_time, op_type, latencies, norm_latencies):
+def calculate_op_statistics(config, stats, total_recorded_time, op_type, latencies, norm_latencies, times):
     if len(latencies) > 0:
         stats[op_type] = calculate_statistics_for_data(latencies)
         stats[op_type]['ops'] = len(latencies)
@@ -235,14 +245,24 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
         if (not 'server_emulate_wan' in config or config['server_emulate_wan']) and len(norm_latencies) > 0:
             stats['%s_norm' % op_type] = calculate_statistics_for_data(norm_latencies)
             stats['%s_norm' % op_type]['samples'] = len(norm_latencies)
+        seconds = [int(ts // 1_000_000_000) for ts in times]
+        counts = collections.Counter(seconds)
+        min_sec = min(seconds)
+        max_sec = max(seconds)
+        tput_over_time = [0]
+        tput_over_time += [counts.get(sec, 0) for sec in range(min_sec, max_sec + 1)]
+        stats[op_type]['tput_over_time'] = tput_over_time
 
-def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts):
+
+
+def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts, region_op_times):
     total_recorded_time = float(config['client_experiment_length'] -
                                 config['client_ramp_up'] -
                                 config['client_ramp_down'])
 
     for op, region_lats_list in region_op_latencies.items():
         total_latencies = sum((len(lats) for lats in region_lats_list))
+        region_times_list = region_op_times[op]
 
         # Process per region
         for i, region_lats in enumerate(region_lats_list):
@@ -251,7 +271,7 @@ def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_la
                 stats[region_key] = {}
 
             # Compute per-region stats
-            calculate_op_statistics(config, stats[region_key], total_recorded_time, op, region_lats, [])
+            calculate_op_statistics(config, stats[region_key], total_recorded_time, op, region_lats, [], region_times_list[i])
 
         # Compute combined statistics across regions
         norm_latencies = []
@@ -262,7 +282,8 @@ def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_la
 
         # Aggregate across all regions
         all_latencies = [lat for region_lats in region_lats_list for lat in region_lats]
-        calculate_op_statistics(config, stats, total_recorded_time, op, all_latencies, norm_latencies)
+        all_times = [t for region_times in region_times_list for t in region_times]
+        calculate_op_statistics(config, stats, total_recorded_time, op, all_latencies, norm_latencies, all_times)
 
 
 def calculate_cdf_for_npdata(npdata):
@@ -430,6 +451,11 @@ def generate_plots(config, base_out_directory, out_dirs):
                         if not csv_class in csv_files[i]:
                             csv_files[i][csv_class] = []
                         csv_files[i][csv_class].append(os.path.join(sub_plot_directory, f))
+                stats_file = os.path.join(collecting[0], config['stats_file_name'])
+                with open(stats_file) as f:
+                    stats = json.load(f)
+                generate_tput_over_time_plot(config, sub_plot_directory,
+                             stats)
             else:
                 for od in collecting[0]:
                     collecting.append(od)
@@ -599,6 +625,50 @@ def generate_cdf_plot(config, plots_directory, plot_name, cdf_data):
     generate_gnuplot_script_cdf(config, plot_script_file)
     run_gnuplot([plot_csv_file], os.path.join(plots_directory, '%s.png' % plot_name),
         plot_script_file)
+
+def generate_csv_for_tput_over_time(csv_file, tput_over_time):
+    with open(csv_file, 'w') as f:
+        writer = csv.writer(f)
+        for sec, tput in enumerate(tput_over_time):
+            writer.writerow([sec, tput])
+
+def generate_gnuplot_script_tput_over_time(config, script_file):
+    with open(script_file, 'w') as f:
+        write_gpi_header(f)
+        f.write("set title 'Throughput (ops) over time (s)'\n")
+        f.write("set key off\n")
+        f.write("set xlabel 'Time (seconds)'\n")
+        f.write("set ylabel 'Throughput (ops/sec)'\n")
+        f.write("set terminal pngcairo size %d,%d enhanced font '%s'\n" %
+                (config['plot_cdf_png_width'],
+                 config['plot_cdf_png_height'],
+                 config['plot_cdf_png_font']))
+        f.write("set output outfile\n")
+        write_line_styles(f)
+        f.write("plot datafile0 with linespoints notitle\n")
+
+def generate_tput_over_time_plot(config, plots_directory, stats):
+    os.makedirs(plots_directory, exist_ok=True)
+
+    if 'aggregate' not in stats:
+        return
+
+    if 'write' not in stats['aggregate']:
+        return
+
+    tput_series = stats['aggregate']['write'].get('tput_over_time', [])
+    if not tput_series:
+        return
+
+    plot_name = "tput-over-time"
+    csv_file = os.path.join(plots_directory, f"{plot_name}.csv")
+    script_file = os.path.join(plots_directory, f"{plot_name}.gpi")
+    png_file = os.path.join(plots_directory, f"{plot_name}.png")
+
+    generate_csv_for_tput_over_time(csv_file, tput_series)
+    generate_gnuplot_script_tput_over_time(config, script_file)
+
+    run_gnuplot([csv_file], png_file, script_file)
 
 def generate_gnuplot_script_lot(config, script_file):
     with open(script_file, 'w') as f:
