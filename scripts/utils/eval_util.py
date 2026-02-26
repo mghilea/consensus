@@ -56,7 +56,7 @@ def calculate_statistics(config, local_out_directory, delete_files=True):
     # Compute per-run statistics for easier plotting/analysis
     stats['runs'] = runs
     stats['run_stats'] = {}
-    ignored = {'cdf', 'cdf_log', 'time'}
+    ignored = {'cdf', 'cdf_log', 'time', 'tput_over_time'}
 
     # Loop over first run keys to structure stats
     first_run = runs[0] if runs else {}
