@@ -230,6 +230,7 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
     #     stats['commit_rate'] = total_committed / total_attempts
     #     stats['abort_rate'] = 1 - stats['commit_rate']
 
+    print("Region op times: ", region_op_times)
     calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts, region_op_times)
     return stats, region_op_latencies, region_op_latency_counts , region_op_times
 
