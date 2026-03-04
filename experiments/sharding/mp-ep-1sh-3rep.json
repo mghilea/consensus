@@ -184,5 +184,6 @@
   "default_remote_shell": "bash",
   "client_disable_gc": false,
   "server_disable_gc": false,
-  "server_gc_debug_trace": true
+  "server_gc_debug_trace": false,
+  "server_memprofile": true
 }

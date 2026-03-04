@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"serverlib"
+	"syscall"
 )
 
 var debug *bool = flag.Bool("debug", false, "Enable debug logging.")
@@ -97,7 +98,7 @@ func main() {
 	log.Printf("]\n")
 
 	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, os.Kill)
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
 	var rep Finishable
 	if *doMDLin {
