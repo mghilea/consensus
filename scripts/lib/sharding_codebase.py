@@ -212,15 +212,15 @@ class ShardingCodebase(ExperimentCodebase):
         #     "sudo echo 'session required /lib/security/pam_limits.so' >> /etc/pam.d/login;"
         # )
 
+        # Raise replica process FD limit if configured
+        if 'max_file_descriptors' in config:
+            replica_command += ' ulimit -n %d; ' % config['max_file_descriptors']
+
         if 'server_gc_debug_trace' in config and config['server_gc_debug_trace']:
             # if is_exp_local(config) or not is_using_tcsh(config):
             #     replica_command = 'GOGC=off; %s' % replica_command
             # else:
-            replica_command = 'GODEBUG=gctrace=1 %s' % replica_command
-
-        # Raise replica process FD limit if configured
-        if 'max_file_descriptors' in config:
-            replica_command += ' ulimit -n %d; ' % config['max_file_descriptors']
+            replica_command += 'GODEBUG=gctrace=1'
 
         # Limit process to only use certain cores
         replica_command += ' taskset -c 0-%d ' % (config['server_max_processors'] - 1)
