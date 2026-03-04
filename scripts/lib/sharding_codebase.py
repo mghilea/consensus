@@ -212,6 +212,12 @@ class ShardingCodebase(ExperimentCodebase):
         #     "sudo echo 'session required /lib/security/pam_limits.so' >> /etc/pam.d/login;"
         # )
 
+        if 'server_gc_debug_trace' in config and config['server_gc_debug_trace']:
+            # if is_exp_local(config) or not is_using_tcsh(config):
+            #     replica_command = 'GOGC=off; %s' % replica_command
+            # else:
+            replica_command = 'GODEBUG=gctrace=1 %s' % replica_command
+
         # Raise replica process FD limit if configured
         if 'max_file_descriptors' in config:
             replica_command += ' ulimit -n %d; ' % config['max_file_descriptors']
@@ -278,11 +284,6 @@ class ShardingCodebase(ExperimentCodebase):
                 sys.stderr.write('!!Can only run Single-Shard-Aware mode with 1-shard configuration!!\n')
                 raise
 
-        if 'server_gc_debug_trace' in config and config['server_gc_debug_trace']:
-            # if is_exp_local(config) or not is_using_tcsh(config):
-            #     replica_command = 'GOGC=off; %s' % replica_command
-            # else:
-            replica_command = 'GODEBUG gctrace=1; %s' % replica_command
         if 'server_disable_gc' in config and config['server_disable_gc']:
             if is_exp_local(config) or not is_using_tcsh(config):
                 replica_command = 'GOGC=off; %s' % replica_command
