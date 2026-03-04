@@ -24,9 +24,14 @@
       "us-west-1-0",
       "eu-west-1-0"
   ],
-  "num_shards": 1,
+  "num_shards": 2,
   "shards": [
         [
+      "us-east-1-0",
+      "us-west-1-0",
+      "eu-west-1-0"
+    ],
+    [
       "us-east-1-0",
       "us-west-1-0",
       "eu-west-1-0"
@@ -65,12 +70,12 @@
       }
   },
  "client_total": [
-    [1],
-    [1]
+    [40],
+    [40]
   ],
   "client_processes_per_client_node": [
-    [1],
-    [1]
+    [40],
+    [40]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -140,10 +145,10 @@
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 16,
-  "server_max_processors": 1,
+  "server_max_processors": 2,
   "client_num_keys": 1000000,
-  "client_ramp_down": 10,
-  "client_ramp_up": 10,
+  "client_ramp_down": 30,
+  "client_ramp_up": 30,
   "client_random_coordinator": false,
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
@@ -177,6 +182,7 @@
   "server_emulate_wan": false,
   "run_locally": false,
   "default_remote_shell": "bash",
-  "client_disable_gc": true,
-  "server_disable_gc": true
+  "client_disable_gc": false,
+  "server_disable_gc": false,
+  "server_gc_debug_trace": true
 }
