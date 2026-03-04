@@ -202,13 +202,30 @@ type ClientJob struct {
 	opCount   int32
 }
 
-func createClientWithID(uniqueID int32, replyChan chan fastrpc.Serializable) clients.Client {
+func InitMachineContext() (*clients.MachineContext, error) {
+    config, err := clients.GetClusterConfig(*coordinatorAddr, *coordinatorPort)
+    if err != nil {
+        return nil, err
+    }
+
+    transport := clients.NewTransport()
+
+    ctx := &clients.MachineContext{
+        Config:   config,
+        Transport: transport,
+    }
+
+    return ctx, nil
+}
+
+
+func createClientWithID(ctx clients.MachineContext, uniqueID int32, replyChan chan fastrpc.Serializable) clients.Client {
 	switch *replProtocol {
 	case "epaxos":
-		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewProposeClient(ctx, uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true, replyChan)
 	default:
-		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewProposeClient(ctx, uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, false, replyChan)
 	}
 }
@@ -221,7 +238,7 @@ func Max(a int64, b int64) int64 {
 	}
 }
 
-func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan struct{}, results chan<- Result, wg *sync.WaitGroup) {
+func clientWorker(ctx clients.MachineContext, threadId int32, startIdx int, clientPoolSize int, stop <-chan struct{}, results chan<- Result, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	// Initialize a shared reply channel for all clients on this worker thread
@@ -238,7 +255,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
         go func(idx int) {
             defer initWg.Done()
 			uniqueID := int32(*clientId * 1000000 + startIdx + idx)
-            client := createClientWithID(uniqueID, replyChan)
+            client := createClientWithID(ctx, uniqueID, replyChan)
 			r := rand.New(rand.NewSource(int64(uniqueID) + time.Now().UnixNano()))
 			zipf, _ := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
             clients[idx] = ClientJob{uniqueID, client, r, zipf, replyChan, time.Now(), 0}
@@ -380,7 +397,10 @@ func main() {
 		}
 	}()
 
-	
+	machineCtx, err := InitMachineContext()
+	if err != nil {
+		log.Fatalf("Failed to initialize machine context: %v", err)
+	}
 
 	workerThreads := runtime.NumCPU()
 	clientPool := *clientProcs / workerThreads
@@ -393,7 +413,7 @@ func main() {
 		if i < extra{
 			poolSize += 1
 		}
-		go clientWorker(int32(i), startIdx, poolSize, stop, results, &wg)
+		go clientWorker(machineCtx, int32(i), startIdx, poolSize, stop, results, &wg)
 		startIdx += poolSize
 	}
 

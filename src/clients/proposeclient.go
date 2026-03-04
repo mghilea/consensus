@@ -17,10 +17,10 @@ type ProposeClient struct {
 	noLeader         bool
 }
 
-func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
+func NewProposeClient(ctx MachineContext, id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
 	fast bool, noLeader bool, replyChan chan fastrpc.Serializable) *ProposeClient {
 	pc := &ProposeClient{
-		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile),
+		NewAbstractClient(ctx, id, masterAddr, masterPort, forceLeader, statsFile),
 		replyChan,                                                    // proposeReplyChan
 		new(genericsmrproto.Propose),                                 // propose
 		0,                                                            // opCount
