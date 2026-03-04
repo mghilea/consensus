@@ -141,7 +141,7 @@
   "bin_directory_name": "bin",
   "client_bin_name": "client-mt",
   "client_debug_output": true,
-  "client_experiment_length": 30,
+  "client_experiment_length": 90,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 16,

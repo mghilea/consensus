@@ -282,7 +282,7 @@ class ShardingCodebase(ExperimentCodebase):
             # if is_exp_local(config) or not is_using_tcsh(config):
             #     replica_command = 'GOGC=off; %s' % replica_command
             # else:
-            replica_command = 'setenv GODEBUG gctrace=1; %s' % replica_command
+            replica_command = 'GODEBUG gctrace=1; %s' % replica_command
         if 'server_disable_gc' in config and config['server_disable_gc']:
             if is_exp_local(config) or not is_using_tcsh(config):
                 replica_command = 'GOGC=off; %s' % replica_command
