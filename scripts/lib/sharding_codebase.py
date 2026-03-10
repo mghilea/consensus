@@ -283,7 +283,11 @@ class ShardingCodebase(ExperimentCodebase):
             if config['num_shards'] != 1:
                 sys.stderr.write('!!Can only run Single-Shard-Aware mode with 1-shard configuration!!\n')
                 raise
-
+        if 'snapshot_enabled' in config and config['snapshot_enabled']:
+            replica_command += ' -snapshotEnabled -snapshotFile %s' % os.path.join(
+                exp_directory, config['out_directory_name'], 'server-%d-%d-snapshot.snap' % (shard_idx, replica_idx))
+            if 'max_instance_space_size' in config:
+                replica_command += ' -maxInstanceSpaceSize %d' % config['max_instance_space_size']
         if 'server_disable_gc' in config and config['server_disable_gc']:
             if is_exp_local(config) or not is_using_tcsh(config):
                 replica_command = 'GOGC=off; %s' % replica_command

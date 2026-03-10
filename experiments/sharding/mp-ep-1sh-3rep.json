@@ -24,14 +24,9 @@
       "us-west-1-0",
       "eu-west-1-0"
   ],
-  "num_shards": 2,
+  "num_shards": 1,
   "shards": [
         [
-      "us-east-1-0",
-      "us-west-1-0",
-      "eu-west-1-0"
-    ],
-    [
       "us-east-1-0",
       "us-west-1-0",
       "eu-west-1-0"
@@ -141,7 +136,7 @@
   "bin_directory_name": "bin",
   "client_bin_name": "client-mt",
   "client_debug_output": true,
-  "client_experiment_length": 90,
+  "client_experiment_length": 150,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 16,
@@ -153,7 +148,7 @@
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "rghilea-291856",
+  "experiment_name": "rghilea-294138",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,
@@ -184,6 +179,8 @@
   "default_remote_shell": "bash",
   "client_disable_gc": false,
   "server_disable_gc": false,
-  "server_gc_debug_trace": false,
-  "server_memprofile": true
+  "server_gc_debug_trace": true,
+  "server_memprofile": true,
+  "snapshot_enabled": true,
+  "max_instance_space_size": 5000
 }

@@ -1,6 +1,7 @@
 package paxos
 
 import (
+	"bytes"
 	"dlog"
 	"encoding/binary"
 	"fastrpc"
@@ -8,8 +9,10 @@ import (
 	"genericsmrproto"
 	"io"
 	"log"
+	"os"
 	"paxosproto"
 	"state"
+	"sync"
 	"time"
   "net/rpc"
   "fmt"
@@ -22,6 +25,7 @@ const FALSE = uint8(0)
 
 const MAX_BATCH = 5000
 const EPOCH_LENGTH = 500
+const COMPACTION_SLEEP_INTERVAL = 10 * time.Millisecond
 
 type Replica struct {
 	*genericsmr.Replica // extends a generic Paxos replica
@@ -45,10 +49,15 @@ type Replica struct {
 	counter             int
 	flush               bool
 	committedUpTo       int32
-	before		    time.Time
-	after		    time.Time
+	before		        time.Time
+	after		        time.Time
 	batchingEnabled     bool
-	epochlen	    int
+	epochlen	        int
+	logOffset           int32
+	snapshotEnabled     bool
+	snapshotFile        string
+	maxInstanceSpaceSize int
+	snapshotLock        sync.Mutex
 }
 
 type InstanceStatus int
@@ -75,8 +84,8 @@ type LeaderBookkeeping struct {
 	nacks           int
 }
 
-func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
-    exec bool, dreply bool, beacon bool, durable bool, statsFile string, batch bool, epochLength int) *Replica {
+func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool, exec bool, dreply bool, 
+	beacon bool, durable bool, statsFile string, batch bool, epochLength int, snapshotEnabled bool, snapshotFile string, maxInstanceSpaceSize int) *Replica {
 	// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
 	r := &Replica{genericsmr.NewReplica(1, id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -97,7 +106,12 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		time.Now(),
 		time.Now(),
 		batch,
-		epochLength}
+		epochLength,
+		0,
+		snapshotEnabled,
+		snapshotFile,
+		maxInstanceSpaceSize,
+		sync.Mutex{}}
 
 
 	log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
@@ -113,6 +127,131 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 	go r.run(masterAddr, masterPort)
 
 	return r
+}
+
+func (r *Replica) getInstance(i int32) *Instance {
+	if i < r.logOffset {
+		return nil
+	}
+
+	if i >= int32(len(r.instanceSpace)) {
+		return nil
+	}
+
+	return r.instanceSpace[i]
+}
+
+func (r *Replica) setInstance(i int32, inst *Instance) {
+	if i < r.logOffset {
+		return
+	}
+
+	for i >= int32(len(r.instanceSpace)) {
+		log.Fatal("Instance index %d out of range", i)
+	}
+
+	r.instanceSpace[i] = inst
+}
+
+func (r *Replica) serializeInstancesSnapshot(instances []*Instance) []byte {
+	buf := &bytes.Buffer{}
+
+	// load previous snapshot
+	latest := r.readSnapshot()
+
+	// merge new commands
+	for _, inst := range instances {
+		if inst == nil || inst.cmds == nil {
+			continue
+		}
+
+		for _, cmd := range inst.cmds {
+			key := int64(cmd.K)
+			latest[key] = cmd
+		}
+	}
+
+	// write snapshot
+	binary.Write(buf, binary.LittleEndian, int32(len(latest)))
+
+	for _, cmd := range latest {
+		cmd.Marshal(buf)
+	}
+
+	return buf.Bytes()
+}
+
+func (r *Replica) runSnapshotCompaction() {
+	const sleepInterval = COMPACTION_SLEEP_INTERVAL
+
+	for !r.Shutdown {
+		if r.snapshotEnabled && r.crtInstance- r.logOffset > int32(r.maxInstanceSpaceSize) {
+			r.updateCommittedUpTo()
+
+			trimCount := int(r.committedUpTo - r.logOffset)
+			if trimCount > 0 {
+				toCompact := r.instanceSpace[r.logOffset:r.logOffset+int32(trimCount)]
+
+				// serialize only latest commands per key
+				data := r.serializeInstancesSnapshot(toCompact)
+
+				if r.snapshotFile != "" {
+					tmpFile := r.snapshotFile + ".tmp"
+
+					// write snapshot to temp file
+					if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+						log.Printf("Error writing snapshot temp file: %v", err)
+					} else {
+						// atomically replace the snapshot file
+						if err := os.Rename(tmpFile, r.snapshotFile); err != nil {
+							log.Printf("Error renaming snapshot temp file: %v", err)
+						} else {
+							log.Printf("Snapshot saved to %s", r.snapshotFile)
+						}
+					}
+				}
+
+				// free up in-memory instanceSpace
+				for i := r.logOffset; i < r.logOffset + int32(trimCount); i++ {
+					r.instanceSpace[i] = nil
+				}
+				r.logOffset += int32(trimCount)
+
+				log.Printf("Snapshot-compacted %d instances, logOffset=%d, crtInstance len=%d, committedUpTo=%d",
+					trimCount, r.logOffset, r.crtInstance, r.committedUpTo)
+			}
+		}
+
+		time.Sleep(sleepInterval)
+	}
+}
+
+func (r *Replica) readSnapshot() map[int64]state.Command {
+	latest := make(map[int64]state.Command)
+
+	if r.snapshotFile == "" {
+		return latest
+	}
+
+	data, err := os.ReadFile(r.snapshotFile)
+	if err != nil {
+		return latest
+	}
+
+	buf := bytes.NewBuffer(data)
+
+	var count int32
+	if err := binary.Read(buf, binary.LittleEndian, &count); err != nil {
+		return latest
+	}
+
+	for i := int32(0); i < count; i++ {
+		var cmd state.Command
+		cmd.Unmarshal(buf)
+		latest[int64(cmd.K)] = cmd
+	}
+
+	return latest
 }
 
 //append a log entry to stable storage
@@ -186,6 +325,10 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	log.Println("Waiting for client connections")
 
 	go r.WaitForClientConnections()
+
+	if r.snapshotEnabled {
+		go r.runSnapshotCompaction()
+	}
 
 	if r.Exec {
 		go r.executeCommands()
@@ -311,8 +454,8 @@ func (r *Replica) makeUniqueBallot(ballot int32) int32 {
 }
 
 func (r *Replica) updateCommittedUpTo() {
-	for r.instanceSpace[r.committedUpTo+1] != nil &&
-		r.instanceSpace[r.committedUpTo+1].status == COMMITTED {
+	for r.getInstance(r.committedUpTo+1) != nil &&
+		r.getInstance(r.committedUpTo+1).status == COMMITTED {
 		r.committedUpTo++
 	}
 }
@@ -446,7 +589,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		return
 	}
 
-	for r.instanceSpace[r.crtInstance] != nil {
+	for r.getInstance(r.crtInstance) != nil {
 		r.crtInstance++
 	}
 
@@ -476,21 +619,21 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	}
 
 	if r.defaultBallot == -1 {
-		r.instanceSpace[instNo] = &Instance{
+		r.setInstance(instNo, &Instance{
 			cmds,
 			r.makeUniqueBallot(0),
 			PREPARING,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0}}
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0}})
 		r.bcastPrepare(instNo, r.makeUniqueBallot(0), true)
 		//dlog.Printf("Classic round for instance %d\n", instNo)
 	} else {
-		r.instanceSpace[instNo] = &Instance{
+		r.setInstance(instNo, &Instance{
 			cmds,
 			r.defaultBallot,
 			PREPARED,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0}}
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0}})
 
-		r.recordInstanceMetadata(r.instanceSpace[instNo])
+		r.recordInstanceMetadata(r.getInstance(instNo))
 		r.recordCommands(cmds)
 		r.sync()
 
@@ -500,7 +643,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 }
 
 func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
-	inst := r.instanceSpace[prepare.Instance]
+	inst := r.getInstance(prepare.Instance)
 	var preply *paxosproto.PrepareReply
 
 	if inst == nil {
@@ -525,18 +668,18 @@ func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
 }
 
 func (r *Replica) handleAccept(accept *paxosproto.Accept) {
-	inst := r.instanceSpace[accept.Instance]
+	inst := r.getInstance(accept.Instance)
 	var areply *paxosproto.AcceptReply
 
 	if inst == nil {
 		if accept.Ballot < r.defaultBallot {
 			areply = &paxosproto.AcceptReply{accept.Instance, FALSE, r.defaultBallot}
 		} else {
-			r.instanceSpace[accept.Instance] = &Instance{
+			r.setInstance(accept.Instance, &Instance{
 				accept.Command,
 				accept.Ballot,
 				ACCEPTED,
-				nil}
+				nil})
 			areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
 		}
 	} else if inst.ballot > accept.Ballot {
@@ -556,15 +699,15 @@ func (r *Replica) handleAccept(accept *paxosproto.Accept) {
 		}
 	} else {
 		// reordered ACCEPT
-		r.instanceSpace[accept.Instance].cmds = accept.Command
-		if r.instanceSpace[accept.Instance].status != COMMITTED {
-			r.instanceSpace[accept.Instance].status = ACCEPTED
+		r.getInstance(accept.Instance).cmds = accept.Command
+		if r.getInstance(accept.Instance).status != COMMITTED {
+			r.getInstance(accept.Instance).status = ACCEPTED
 		}
 		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
 	}
 
 	if areply.OK == TRUE {
-		r.recordInstanceMetadata(r.instanceSpace[accept.Instance])
+		r.recordInstanceMetadata(r.getInstance(accept.Instance))
 		r.recordCommands(accept.Command)
 		r.sync()
 	}
@@ -573,20 +716,20 @@ func (r *Replica) handleAccept(accept *paxosproto.Accept) {
 }
 
 func (r *Replica) handleCommit(commit *paxosproto.Commit) {
-	inst := r.instanceSpace[commit.Instance]
+	inst := r.getInstance(commit.Instance)
 
 	//dlog.Printf("Committing instance %d\n", commit.Instance)
 
 	if inst == nil {
-		r.instanceSpace[commit.Instance] = &Instance{
+		r.setInstance(commit.Instance, &Instance{
 			commit.Command,
 			commit.Ballot,
 			COMMITTED,
-			nil}
+			nil})
 	} else {
-		r.instanceSpace[commit.Instance].cmds = commit.Command
-		r.instanceSpace[commit.Instance].status = COMMITTED
-		r.instanceSpace[commit.Instance].ballot = commit.Ballot
+		r.getInstance(commit.Instance).cmds = commit.Command
+		r.getInstance(commit.Instance).status = COMMITTED
+		r.getInstance(commit.Instance).ballot = commit.Ballot
 		if inst.lb != nil && inst.lb.clientProposals != nil {
 			for i := 0; i < len(inst.lb.clientProposals); i++ {
 				r.ProposeChan <- inst.lb.clientProposals[i]
@@ -597,23 +740,23 @@ func (r *Replica) handleCommit(commit *paxosproto.Commit) {
 
 	r.updateCommittedUpTo()
 
-	r.recordInstanceMetadata(r.instanceSpace[commit.Instance])
+	r.recordInstanceMetadata(r.getInstance(commit.Instance))
 	r.recordCommands(commit.Command)
 }
 
 func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
-	inst := r.instanceSpace[commit.Instance]
+	inst := r.getInstance(commit.Instance)
 
 	//dlog.Printf("Committing instance %d\n", commit.Instance)
 
 	if inst == nil {
-		r.instanceSpace[commit.Instance] = &Instance{nil,
+		r.setInstance(commit.Instance, &Instance{nil,
 			commit.Ballot,
 			COMMITTED,
-			nil}
+			nil})
 	} else {
-		r.instanceSpace[commit.Instance].status = COMMITTED
-		r.instanceSpace[commit.Instance].ballot = commit.Ballot
+		r.getInstance(commit.Instance).status = COMMITTED
+		r.getInstance(commit.Instance).ballot = commit.Ballot
 		if inst.lb != nil && inst.lb.clientProposals != nil {
 			for i := 0; i < len(inst.lb.clientProposals); i++ {
 				r.ProposeChan <- inst.lb.clientProposals[i]
@@ -624,11 +767,14 @@ func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
 
 	r.updateCommittedUpTo()
 
-	r.recordInstanceMetadata(r.instanceSpace[commit.Instance])
+	r.recordInstanceMetadata(r.getInstance(commit.Instance))
 }
 
 func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
-	inst := r.instanceSpace[preply.Instance]
+	inst := r.getInstance(preply.Instance)
+	if inst == nil {
+		return
+	}
 
 	if inst.status != PREPARING {
 		// TODO: should replies for non-current ballots be ignored?
@@ -659,7 +805,7 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 			if inst.ballot > r.defaultBallot {
 				r.defaultBallot = inst.ballot
 			}
-			r.recordInstanceMetadata(r.instanceSpace[preply.Instance])
+			r.recordInstanceMetadata(r.getInstance(preply.Instance))
 			r.sync()
 			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds)
 		}
@@ -682,8 +828,10 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 }
 
 func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
-
-	inst := r.instanceSpace[areply.Instance]
+	inst := r.getInstance(areply.Instance)
+	if inst == nil {
+		return
+	}
 
 	if inst.status != PREPARED && inst.status != ACCEPTED {
 		// we've move on, these are delayed replies, so just ignore
@@ -693,7 +841,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 	if areply.OK == TRUE {
 		inst.lb.acceptOKs++
 		if inst.lb.acceptOKs+1 > r.N>>1 {
-			inst = r.instanceSpace[areply.Instance]
+			inst = r.getInstance(areply.Instance)
 			inst.status = COMMITTED
 			if inst.lb.clientProposals != nil {
 				// give client the all clear
@@ -705,13 +853,13 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 							state.NIL,
 							inst.lb.clientProposals[i].Timestamp,
 							inst.lb.clientProposals[i].ClientId}
-						dlog.Printf("Replying to client request after accept for clientId % and commandId %d at timestamp %f\n", propreply.ClientId, propreply.CommandId, time.Now().UnixNano())
+						dlog.Printf("Replying to client request after accept for clientId %d and commandId %d at timestamp %f\n", propreply.ClientId, propreply.CommandId, time.Now().UnixNano())
 						r.ReplyProposeTS(propreply, inst.lb.clientProposals[i].Reply)
 					}
 				}
 			}
 
-			r.recordInstanceMetadata(r.instanceSpace[areply.Instance])
+			r.recordInstanceMetadata(r.getInstance(areply.Instance))
 			r.sync() //is this necessary?
 
 			r.updateCommittedUpTo()
@@ -731,13 +879,18 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 }
 
 func (r *Replica) executeCommands() {
-	i := int32(0)
+	i := int32(r.logOffset)
 	for !r.Shutdown {
 		//executed := false
 
 		for i <= r.committedUpTo {
-			if r.instanceSpace[i].cmds != nil {
-				inst := r.instanceSpace[i]
+			inst := r.getInstance(i)
+			if inst == nil {
+				break
+			}
+
+			if inst.cmds != nil {
+				inst := r.getInstance(i)
 				for j := 0; j < len(inst.cmds); j++ {
 					val := inst.cmds[j].Execute(r.State)
 					if r.NeedsWaitForExecute(&inst.cmds[j]) && inst.lb != nil && inst.lb.clientProposals != nil {

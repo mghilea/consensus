@@ -61,6 +61,9 @@ var shortcircuitTime *int = flag.Int("shortcircuitTime", 100, "Timeout for short
 var fastOverwriteTime *int = flag.Int("fastOverwriteTime", 100, "Timeout for fast overwrites writes in milliseconds")
 var forceWritePeriod *int = flag.Int("forceWritePeriod", 100, "Maximum time between forced writes in milliseconds.")
 var broadcastOptimizationEnabled *bool = flag.Bool("broadcastOptimizationEnabled", false, "Toggles the EPaxos broadcast optimization.")
+var snapshotEnabled = flag.Bool("snapshotEnabled", false, "Run snapshot compaction for instance space")
+var snapshotFile = flag.String("snapshotFile", "", "Name of snapshot file")
+var maxInstanceSpaceSize = flag.Int("maxInstanceSpaceSize", 1, "Maximum size of instance space before log compaction gets triggered")
 
 func main() {
 	flag.Parse()
@@ -146,7 +149,7 @@ func main() {
 	} else {
 		log.Println("Starting classic Paxos replica...")
 		rep = paxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
-			*beacon, *durable, *statsFile, *doBatch, *epochLength)
+			*beacon, *durable, *statsFile, *doBatch, *epochLength, *snapshotEnabled, *snapshotFile, *maxInstanceSpaceSize)
 	}
 
 	rpc.Register(rep)
