@@ -258,42 +258,61 @@ func (r *Replica) runSnapshotCompaction() {
 	const sleepInterval = COMPACTION_SLEEP_INTERVAL
 
 	for !r.Shutdown {
-        for q := int32(0); q < int32(r.N); q++ {
+		trimCount := make([]int, r.N)
+		var toCompact []*Instance
+		
+		for q := int32(0); q < int32(r.N); q++ {
 			if r.crtInstance[q] - r.logOffset[q] > int32(r.maxInstanceSpaceSize){
-				trimCount := int(r.ExecedUpTo[q] - r.logOffset[q])
-				if trimCount > 0 {
-					toCompact := r.InstanceSpace[q][r.logOffset[q]:r.logOffset[q]+int32(trimCount)]
-
-					// serialize only latest commands per key
-					data := r.serializeInstancesSnapshot(toCompact)
-
-					if r.snapshotFile != "" {
-						tmpFile := r.snapshotFile + ".tmp"
-
-						// write snapshot to temp file
-						if err := os.WriteFile(tmpFile, data, 0644); err != nil {
-							log.Printf("Error writing snapshot temp file: %v", err)
-						} else {
-							// atomically replace the snapshot file
-							if err := os.Rename(tmpFile, r.snapshotFile); err != nil {
-								log.Printf("Error renaming snapshot temp file: %v", err)
-							} else {
-								log.Printf("Snapshot saved to %s", r.snapshotFile)
-							}
-						}
-					}
-
-					// free up in-memory instanceSpace
-					for i := r.logOffset[q]; i < r.logOffset[q] + int32(trimCount); i++ {
-						r.setInstance(q, i, nil)
-					}
-					r.logOffset[q] += int32(trimCount)
-
-					log.Printf("Snapshot-compacted %d instances, replicaId=%d, logOffset=%d, crtInstance=%d, ExecedUpTo=%d",
-						trimCount, q, r.logOffset[q], r.crtInstance[q], r.ExecedUpTo[q])
+				trim := int(r.ExecedUpTo[q] - r.logOffset[q])
+				if trim > 0 { 
+					trimCount[q] = trim
+					insts := r.InstanceSpace[q][r.logOffset[q] : r.logOffset[q]+int32(trim)] 
+					toCompact = append(toCompact, insts...) 
 				}
 			}
-        }
+		}
+
+		// If nothing to compact, sleep 
+		if len(toCompact) == 0 { 
+			time.Sleep(sleepInterval) 
+			continue 
+		}
+
+		// Serialize snapshot once
+		data := r.serializeInstancesSnapshot(toCompact)
+
+		// Write snapshot once
+		if r.snapshotFile != "" {
+			tmpFile := r.snapshotFile + ".tmp"
+
+			// write snapshot to temp file
+			if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+				log.Printf("Error writing snapshot temp file: %v", err)
+			} else {
+				// atomically replace the snapshot file
+				if err := os.Rename(tmpFile, r.snapshotFile); err != nil {
+					log.Printf("Error renaming snapshot temp file: %v", err)
+				} else {
+					log.Printf("Snapshot saved to %s", r.snapshotFile)
+				}
+			}
+		}
+
+		// free up memory
+		for q := int32(0); q < int32(r.N); q++ { 
+			trim := trimCount[q] 
+
+			if trim == 0 { 
+				continue 
+			} 
+
+			for i := r.logOffset[q] ; i < r.logOffset[q] + int32(trim); i++ { 
+				r.setInstance(q, i, nil) 
+			} 
+			r.logOffset[q] += int32(trim) 
+
+			log.Printf( "Snapshot-compacted %d instances, replicaId=%d, logOffset=%d, crtInstance=%d, ExecedUpTo=%d", trim, q, r.logOffset[q], r.crtInstance[q], r.ExecedUpTo[q], ) 
+		}
 
 		time.Sleep(sleepInterval)
     }
