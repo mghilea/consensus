@@ -926,8 +926,9 @@ func (r *Replica) updateAttributes(cmds []state.Command, seq int32, deps [DS]int
 					highestInterf, ok := keyMap[cmds[i].Op]
 					if ok && highestInterf > deps[q] {
 						deps[q] = highestInterf
-						if seq <= r.getInstance(int32(q), highestInterf).Seq {
-							seq = r.getInstance(int32(q), highestInterf).Seq + 1
+						inst := r.getInstance(int32(q), highestInterf)
+						if inst != nil && seq <= inst.Seq {
+							seq = inst.Seq + 1
 						}
 						changed = true
 					}
