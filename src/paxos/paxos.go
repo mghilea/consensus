@@ -12,7 +12,6 @@ import (
 	"os"
 	"paxosproto"
 	"state"
-	"sync"
 	"time"
   "net/rpc"
   "fmt"
@@ -57,7 +56,6 @@ type Replica struct {
 	snapshotEnabled     bool
 	snapshotFile        string
 	maxInstanceSpaceSize int
-	snapshotLock        sync.Mutex
 }
 
 type InstanceStatus int
@@ -110,8 +108,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		0,
 		snapshotEnabled,
 		snapshotFile,
-		maxInstanceSpaceSize,
-		sync.Mutex{}}
+		maxInstanceSpaceSize}
 
 
 	log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
@@ -146,7 +143,7 @@ func (r *Replica) setInstance(i int32, inst *Instance) {
 		return
 	}
 
-	for i >= int32(len(r.instanceSpace)) {
+	if i >= int32(len(r.instanceSpace)) {
 		log.Fatal("Instance index %d out of range", i)
 	}
 

@@ -2,6 +2,7 @@ package epaxos
 
 import (
 	"bloomfilter"
+	"bytes"
 	"dlog"
 	"encoding/binary"
 	"epaxosproto"
@@ -11,6 +12,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"os"
 	"state"
 	"sync"
 	"time"
@@ -36,6 +38,8 @@ var bf_PT uint32
 const DO_CHECKPOINTING = false
 const HT_INIT_SIZE = 200000
 const CHECKPOINT_PERIOD = 10000
+
+const COMPACTION_SLEEP_INTERVAL = 10 * time.Millisecond
 
 var cpMarker []state.Command
 var cpcounter = 0
@@ -78,7 +82,11 @@ type Replica struct {
 	latestCPInstance      int32
 	clientMutex           *sync.Mutex // for synchronizing when sending replies to clients from multiple go-routines
 	instancesToRecover    chan *instanceId
-	noConflicts bool
+	noConflicts           bool
+	logOffset             []int32 // per replica log offset which determines where the current instance space starts
+	snapshotEnabled       bool
+	snapshotFile          string
+	maxInstanceSpaceSize  int
 }
 
 type Instance struct {
@@ -130,7 +138,7 @@ type LeaderBookkeeping struct {
 
 func NewReplica(shardIdx int, id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
 		exec bool, dreply bool, beacon bool, durable bool, statsFile string,
-		noConflicts bool) *Replica {
+		noConflicts bool, snapshotEnabled bool, snapshotFile string, maxInstanceSpaceSize int) *Replica {
 	r := &Replica{
 		// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
 		genericsmr.NewReplica(shardIdx, id, peerAddrList, 0, thrifty, exec, dreply, true,
@@ -162,17 +170,22 @@ func NewReplica(shardIdx int, id int, peerAddrList []string, masterAddr string, 
 		new(sync.Mutex),
 		make(chan *instanceId, genericsmr.CHAN_BUFFER_SIZE),
 		noConflicts,
+		make([]int32, len(peerAddrList)),
+		snapshotEnabled,
+		snapshotFile,
+		maxInstanceSpaceSize,
 	}
 
 	r.Beacon = beacon
 	r.Durable = durable
 
 	for i := 0; i < r.N; i++ {
-		r.InstanceSpace[i] = make([]*Instance, 2*1024*1024)
+		r.InstanceSpace[i] = make([]*Instance, 5*1024*1024)
 		r.crtInstance[i] = 0
 		r.ExecedUpTo[i] = -1
 		r.conflicts1[i] = make(map[state.Key]map[state.Operation]int32, HT_INIT_SIZE)
 		r.conflicts[i] = make(map[state.Key]int32, HT_INIT_SIZE)
+		r.logOffset[i] = 0
 	}
 
 	for bf_PT = 1; math.Pow(2, float64(bf_PT))/float64(MAX_BATCH) < BF_M_N; {
@@ -199,6 +212,147 @@ func NewReplica(shardIdx int, id int, peerAddrList []string, masterAddr string, 
 	go r.run(masterAddr, masterPort)
 
 	return r
+}
+
+func (r *Replica) getInstance(i int32, j int32) *Instance {
+	if int32(len(r.logOffset)) < i {
+		return nil
+	}
+
+	if j < r.logOffset[i] {
+		return nil
+	}
+
+	if i >= int32(len(r.InstanceSpace)) {
+		return nil
+	}
+
+	if j >= int32(len(r.InstanceSpace[i])) {
+		return nil
+	}
+
+	return r.InstanceSpace[i][j]
+}
+
+func (r *Replica) setInstance(i int32, j int32,  inst *Instance) {
+	if int32(len(r.logOffset)) < i {
+		log.Fatal("Replica index %d out of range", i)
+	}
+
+	if j < r.logOffset[i] {
+		log.Fatal("Instance index %d out of range", i)
+	}
+
+	if i >= int32(len(r.InstanceSpace)) {
+		log.Fatal("Replica index %d out of range", i)
+	}
+
+	if j >= int32(len(r.InstanceSpace[i])) {
+		log.Fatal("Instance index %d out of range", i)
+	}
+
+	r.InstanceSpace[i][j] = inst
+}
+
+func (r *Replica) runSnapshotCompaction() {
+	const sleepInterval = COMPACTION_SLEEP_INTERVAL
+
+	for !r.Shutdown {
+        for q := int32(0); q < int32(r.N); q++ {
+			if r.crtInstance[q] - r.logOffset[q] > int32(r.maxInstanceSpaceSize){
+				trimCount := int(r.ExecedUpTo[q] - r.logOffset[q])
+				if trimCount > 0 {
+					toCompact := r.InstanceSpace[q][r.logOffset[q]:r.logOffset[q]+int32(trimCount)]
+
+					// serialize only latest commands per key
+					data := r.serializeInstancesSnapshot(toCompact)
+
+					if r.snapshotFile != "" {
+						tmpFile := r.snapshotFile + ".tmp"
+
+						// write snapshot to temp file
+						if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+							log.Printf("Error writing snapshot temp file: %v", err)
+						} else {
+							// atomically replace the snapshot file
+							if err := os.Rename(tmpFile, r.snapshotFile); err != nil {
+								log.Printf("Error renaming snapshot temp file: %v", err)
+							} else {
+								log.Printf("Snapshot saved to %s", r.snapshotFile)
+							}
+						}
+					}
+
+					// free up in-memory instanceSpace
+					for i := r.logOffset[q]; i < r.logOffset[q] + int32(trimCount); i++ {
+						r.setInstance(q, i, nil)
+					}
+					r.logOffset[q] += int32(trimCount)
+
+					log.Printf("Snapshot-compacted %d instances, replicaId=%d, logOffset=%d, crtInstance=%d, ExecedUpTo=%d",
+						trimCount, q, r.logOffset[q], r.crtInstance[q], r.ExecedUpTo[q])
+				}
+			}
+        }
+
+		time.Sleep(sleepInterval)
+    }
+}
+
+func (r *Replica) serializeInstancesSnapshot(instances []*Instance) []byte {
+	buf := &bytes.Buffer{}
+
+	// load previous snapshot
+	latest := r.readSnapshot()
+
+	// merge new commands
+	for _, inst := range instances {
+		if inst == nil || inst.Cmds == nil {
+			continue
+		}
+
+		for _, cmd := range inst.Cmds {
+			key := int64(cmd.K)
+			latest[key] = cmd
+		}
+	}
+
+	// write snapshot
+	binary.Write(buf, binary.LittleEndian, int32(len(latest)))
+
+	for _, cmd := range latest {
+		cmd.Marshal(buf)
+	}
+
+	return buf.Bytes()
+}
+
+func (r *Replica) readSnapshot() map[int64]state.Command {
+	latest := make(map[int64]state.Command)
+
+	if r.snapshotFile == "" {
+		return latest
+	}
+
+	data, err := os.ReadFile(r.snapshotFile)
+	if err != nil {
+		return latest
+	}
+
+	buf := bytes.NewBuffer(data)
+
+	var count int32
+	if err := binary.Read(buf, binary.LittleEndian, &count); err != nil {
+		return latest
+	}
+
+	for i := int32(0); i < count; i++ {
+		var cmd state.Command
+		cmd.Unmarshal(buf)
+		latest[int64(cmd.K)] = cmd
+	}
+
+	return latest
 }
 
 //append a log entry to stable storage
@@ -292,6 +446,10 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 	if r.Beacon {
 		go r.StopAdapting()
+	}
+
+	if r.snapshotEnabled {
+		go r.runSnapshotCompaction()
 	}
 
 	onOffProposeChan := r.ProposeChan
@@ -457,14 +615,14 @@ func (r *Replica) executeCommands() {
 		for q := 0; q < r.N; q++ {
 			inst := int32(0)
 			for inst = r.ExecedUpTo[q] + 1; inst < r.crtInstance[q]; inst++ {
-				if r.InstanceSpace[q][inst] != nil && r.InstanceSpace[q][inst].Status == epaxosproto.EXECUTED {
+				if r.getInstance(int32(q), inst) != nil && r.getInstance(int32(q), inst).Status == epaxosproto.EXECUTED {
 					dlog.Printf("[%d.%d] Already execed via dependent instance.\n", q, inst)
 					if inst == r.ExecedUpTo[q]+1 {
 						r.ExecedUpTo[q] = inst
 					}
 					continue
 				}
-				if r.InstanceSpace[q][inst] == nil || r.InstanceSpace[q][inst].Status != epaxosproto.COMMITTED {
+				if r.getInstance(int32(q), inst) == nil || r.getInstance(int32(q), inst).Status != epaxosproto.COMMITTED {
 					if inst == problemInstance[q] {
 						timeout[q] += SLEEP_TIME_NS
 						if timeout[q] >= COMMIT_GRACE_PERIOD {
@@ -475,13 +633,13 @@ func (r *Replica) executeCommands() {
 						problemInstance[q] = inst
 						timeout[q] = 0
 					}
-					if r.InstanceSpace[q][inst] == nil {
+					if r.getInstance(int32(q), inst) == nil {
 						continue
 					}
 					break
 				}
-				if r.InstanceSpace[q][inst].lb != nil {
-					dlog.Printf("[%d.%d] Trying to execute at time %d.\n", q, inst, time.Now().Sub(r.InstanceSpace[q][inst].lb.committedTime))
+				if r.getInstance(int32(q), inst).lb != nil {
+					dlog.Printf("[%d.%d] Trying to execute at time %d.\n", q, inst, time.Now().Sub(r.getInstance(int32(q), inst).lb.committedTime))
 				}
 				if ok := r.exec.executeCommand(int32(q), inst); ok {
 					executed = true
@@ -715,9 +873,9 @@ func (r *Replica) clearHashtables() {
 }
 
 func (r *Replica) updateCommitted(replica int32) {
-	for r.InstanceSpace[replica][r.CommittedUpTo[replica]+1] != nil &&
-		(r.InstanceSpace[replica][r.CommittedUpTo[replica]+1].Status == epaxosproto.COMMITTED ||
-			r.InstanceSpace[replica][r.CommittedUpTo[replica]+1].Status == epaxosproto.EXECUTED) {
+	for r.getInstance(replica, r.CommittedUpTo[replica]+1) != nil &&
+		(r.getInstance(replica, r.CommittedUpTo[replica]+1).Status == epaxosproto.COMMITTED ||
+			r.getInstance(replica, r.CommittedUpTo[replica]+1).Status == epaxosproto.EXECUTED) {
 		r.CommittedUpTo[replica] = r.CommittedUpTo[replica] + 1
 		dlog.Printf("Committed up to %d.%d.\n", replica, r.CommittedUpTo[replica])
 	}
@@ -768,8 +926,8 @@ func (r *Replica) updateAttributes(cmds []state.Command, seq int32, deps [DS]int
 					highestInterf, ok := keyMap[cmds[i].Op]
 					if ok && highestInterf > deps[q] {
 						deps[q] = highestInterf
-						if seq <= r.InstanceSpace[q][highestInterf].Seq {
-							seq = r.InstanceSpace[q][highestInterf].Seq + 1
+						if seq <= r.getInstance(int32(q), highestInterf).Seq {
+							seq = r.getInstance(int32(q), highestInterf).Seq + 1
 						}
 						changed = true
 					}
@@ -935,7 +1093,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 
 	seq, deps, _ = r.updateAttributes(cmds, seq, deps, replica, instance)
 
-	r.InstanceSpace[r.Id][instance] = &Instance{
+	r.setInstance(r.Id, instance, &Instance{
 		cmds,
 		ballot,
 		epaxosproto.PREACCEPTED,
@@ -943,7 +1101,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 		deps,
 		&LeaderBookkeeping{proposals, 0, 0, true, 0, 0, 0, deps, []int32{-1, -1, -1, -1, -1}, nil, false, false, nil, 0, time.Time{},
 			time.Time{}, time.Time{}, make([]time.Time, len(r.PeerAddrList))},
-		0, 0, nil, instance}
+		0, 0, nil, instance})
 
 	r.updateConflicts(cmds, r.Id, instance, seq)
 
@@ -951,7 +1109,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 		r.maxSeq = seq + 1
 	}
 
-	r.recordInstanceMetadata(r.InstanceSpace[r.Id][instance])
+	r.recordInstanceMetadata(r.getInstance(r.Id, instance))
 	r.recordCommands(cmds)
 	r.sync()
 
@@ -972,7 +1130,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 			deps[q] = r.crtInstance[q] - 1
 		}
 
-		r.InstanceSpace[r.Id][instance] = &Instance{
+		r.setInstance(r.Id, instance, &Instance{
 			cpMarker,
 			0,
 			epaxosproto.PREACCEPTED,
@@ -982,7 +1140,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 			0,
 			0,
 			nil,
-			instance}
+			instance})
 
 		r.latestCPReplica = r.Id
 		r.latestCPInstance = instance
@@ -990,7 +1148,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 		//discard dependency hashtables
 		r.clearHashtables()
 
-		r.recordInstanceMetadata(r.InstanceSpace[r.Id][instance])
+		r.recordInstanceMetadata(r.getInstance(r.Id, instance))
 		r.sync()
 
 		r.bcastPreAccept(r.Id, instance, 0, cpMarker, r.maxSeq, deps)
@@ -998,7 +1156,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 }
 
 func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
-	inst := r.InstanceSpace[preAccept.LeaderId][preAccept.Instance]
+	inst := r.getInstance(preAccept.LeaderId, preAccept.Instance)
 
 	if preAccept.Seq >= r.maxSeq {
 		r.maxSeq = preAccept.Seq + 1
@@ -1007,7 +1165,7 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 	if inst != nil && (inst.Status == epaxosproto.COMMITTED || inst.Status == epaxosproto.ACCEPTED) {
 		//reordered handling of commit/accept and pre-accept
 		if inst.Cmds == nil {
-			r.InstanceSpace[preAccept.LeaderId][preAccept.Instance].Cmds = preAccept.Command
+			r.getInstance(preAccept.LeaderId, preAccept.Instance).Cmds = preAccept.Command
 			r.updateConflicts(preAccept.Command, preAccept.Replica, preAccept.Instance, preAccept.Seq)
 			//r.InstanceSpace[preAccept.LeaderId][preAccept.Instance].bfilter = bfFromCommands(preAccept.Command)
 		}
@@ -1055,7 +1213,7 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 			inst.Status = status
 		}
 	} else {
-		r.InstanceSpace[preAccept.Replica][preAccept.Instance] = &Instance{
+		r.setInstance(preAccept.Replica, preAccept.Instance, &Instance{
 			preAccept.Command,
 			preAccept.Ballot,
 			status,
@@ -1063,12 +1221,12 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 			deps,
 			nil, 0, 0,
 			nil,
-			preAccept.Instance}
+			preAccept.Instance})
 	}
 
 	r.updateConflicts(preAccept.Command, preAccept.Replica, preAccept.Instance, preAccept.Seq)
 
-	r.recordInstanceMetadata(r.InstanceSpace[preAccept.Replica][preAccept.Instance])
+	r.recordInstanceMetadata(r.getInstance(preAccept.Replica, preAccept.Instance))
 	r.recordCommands(preAccept.Command)
 	r.sync()
 
@@ -1111,7 +1269,7 @@ func (r *Replica) fastPathQuorum() int {
 
 func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 	dlog.Printf("[%d.%d] Handling PreAcceptReply\n", pareply.Replica, pareply.Instance)
-	inst := r.InstanceSpace[pareply.Replica][pareply.Instance]
+	inst := r.getInstance(pareply.Replica, pareply.Instance)
 
 	// we can't ignore the PreAccept reply if we've sent out Accept messages but are
 	// still waiting for a fast path quorum. I guess the other way to implement this
@@ -1179,7 +1337,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 		happy++
 		dlog.Printf("Fast path for instance %d.%d\n", pareply.Replica, pareply.Instance)
 		inst.lb.committedTime = time.Now()
-		r.InstanceSpace[pareply.Replica][pareply.Instance].Status = epaxosproto.COMMITTED
+		r.getInstance(pareply.Replica, pareply.Instance).Status = epaxosproto.COMMITTED
 		r.updateCommitted(pareply.Replica)
 		writeKey0 := false
 		readKey0 := false
@@ -1236,7 +1394,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 
 func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
 	dlog.Printf("[%d.%d] Handling PreAcceptOK\n", r.Id, pareply.Instance)
-	inst := r.InstanceSpace[r.Id][pareply.Instance]
+	inst := r.getInstance(r.Id, pareply.Instance)
 
 	// we can't ignore the PreAccept reply if we've sent out Accept messages but are
 	// still waiting for a fast path quorum. I guess the other way to implement this
@@ -1279,7 +1437,7 @@ func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
 	//can we commit on the fast path?
 	if inst.lb.preAcceptOKs >= r.fastPathQuorum()-1 && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
 		happy++
-		r.InstanceSpace[r.Id][pareply.Instance].Status = epaxosproto.COMMITTED
+		r.getInstance(r.Id, pareply.Instance).Status = epaxosproto.COMMITTED
 		r.updateCommitted(r.Id)
 		inst.lb.committedTime = time.Now()
 		writeKey0 := false
@@ -1340,7 +1498,7 @@ func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
 ***********************************************************************/
 
 func (r *Replica) handleAccept(accept *epaxosproto.Accept) {
-	inst := r.InstanceSpace[accept.LeaderId][accept.Instance]
+	inst := r.getInstance(accept.LeaderId, accept.Instance)
 
 	if accept.Seq >= r.maxSeq {
 		r.maxSeq = accept.Seq + 1
@@ -1363,13 +1521,13 @@ func (r *Replica) handleAccept(accept *epaxosproto.Accept) {
 		inst.Seq = accept.Seq
 		inst.Deps = accept.Deps
 	} else {
-		r.InstanceSpace[accept.LeaderId][accept.Instance] = &Instance{
+		r.setInstance(accept.LeaderId, accept.Instance, &Instance{
 			nil,
 			accept.Ballot,
 			epaxosproto.ACCEPTED,
 			accept.Seq,
 			accept.Deps,
-			nil, 0, 0, nil, accept.Instance}
+			nil, 0, 0, nil, accept.Instance})
 
 		if accept.Count == 0 {
 			//checkpoint
@@ -1382,7 +1540,7 @@ func (r *Replica) handleAccept(accept *epaxosproto.Accept) {
 		}
 	}
 
-	r.recordInstanceMetadata(r.InstanceSpace[accept.Replica][accept.Instance])
+	r.recordInstanceMetadata(r.getInstance(accept.Replica, accept.Instance))
 	r.sync()
 
 	r.replyAccept(accept.LeaderId,
@@ -1394,7 +1552,7 @@ func (r *Replica) handleAccept(accept *epaxosproto.Accept) {
 }
 
 func (r *Replica) handleAcceptReply(areply *epaxosproto.AcceptReply) {
-	inst := r.InstanceSpace[areply.Replica][areply.Instance]
+	inst := r.getInstance(areply.Replica, areply.Instance)
 
 	if inst.Status != epaxosproto.ACCEPTED {
 		// we've move on, these are delayed replies, so just ignore
@@ -1421,7 +1579,7 @@ func (r *Replica) handleAcceptReply(areply *epaxosproto.AcceptReply) {
 
 	if inst.lb.acceptOKs+1 > r.N/2 {
 		inst.lb.committedTime = time.Now()
-		r.InstanceSpace[areply.Replica][areply.Instance].Status = epaxosproto.COMMITTED
+		r.getInstance(areply.Replica, areply.Instance).Status = epaxosproto.COMMITTED
 		r.updateCommitted(areply.Replica)
 		writeKey0 := false
 		readKey0 := false
@@ -1471,7 +1629,7 @@ func (r *Replica) handleAcceptReply(areply *epaxosproto.AcceptReply) {
 
 func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 	dlog.Printf("[%d.%d] Received Commit.\n", commit.Replica, commit.Instance)
-	inst := r.InstanceSpace[commit.Replica][commit.Instance]
+	inst := r.getInstance(commit.Replica, commit.Instance)
 
 	if commit.Seq >= r.maxSeq {
 		r.maxSeq = commit.Seq + 1
@@ -1497,7 +1655,7 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 		inst.Status = epaxosproto.COMMITTED
 	} else {
 		dlog.Printf("[%d.%d] Updated with committed instance.\n", commit.Replica, commit.Instance)
-		r.InstanceSpace[commit.Replica][int(commit.Instance)] = &Instance{
+		r.setInstance(commit.Replica, int32(commit.Instance), &Instance{
 			commit.Command,
 			0,
 			epaxosproto.COMMITTED,
@@ -1507,7 +1665,7 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 			0,
 			0,
 			nil,
-			commit.Instance}
+			commit.Instance})
 
 		r.updateConflicts(commit.Command, commit.Replica, commit.Instance, commit.Seq)
 
@@ -1523,12 +1681,12 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 	}
 	r.updateCommitted(commit.Replica)
 
-	r.recordInstanceMetadata(r.InstanceSpace[commit.Replica][commit.Instance])
+	r.recordInstanceMetadata(r.getInstance(commit.Replica, commit.Instance))
 	r.recordCommands(commit.Command)
 }
 
 func (r *Replica) handleCommitShort(commit *epaxosproto.CommitShort) {
-	inst := r.InstanceSpace[commit.Replica][commit.Instance]
+	inst := r.getInstance(commit.Replica, commit.Instance)
 
 	if commit.Instance >= r.crtInstance[commit.Replica] {
 		r.crtInstance[commit.Replica] = commit.Instance + 1
@@ -1546,13 +1704,13 @@ func (r *Replica) handleCommitShort(commit *epaxosproto.CommitShort) {
 		inst.Deps = commit.Deps
 		inst.Status = epaxosproto.COMMITTED
 	} else {
-		r.InstanceSpace[commit.Replica][commit.Instance] = &Instance{
+		r.setInstance(commit.Replica, commit.Instance, &Instance{
 			nil,
 			0,
 			epaxosproto.COMMITTED,
 			commit.Seq,
 			commit.Deps,
-			nil, 0, 0, nil, commit.Instance}
+			nil, 0, 0, nil, commit.Instance})
 
 		if commit.Count == 0 {
 			//checkpoint
@@ -1566,7 +1724,7 @@ func (r *Replica) handleCommitShort(commit *epaxosproto.CommitShort) {
 	}
 	r.updateCommitted(commit.Replica)
 
-	r.recordInstanceMetadata(r.InstanceSpace[commit.Replica][commit.Instance])
+	r.recordInstanceMetadata(r.getInstance(commit.Replica, commit.Instance))
 }
 
 /**********************************************************************
@@ -1578,11 +1736,11 @@ func (r *Replica) handleCommitShort(commit *epaxosproto.CommitShort) {
 func (r *Replica) startRecoveryForInstance(replica int32, instance int32) {
 	var nildeps [DS]int32
 
-	if r.InstanceSpace[replica][instance] == nil {
-		r.InstanceSpace[replica][instance] = &Instance{nil, 0, epaxosproto.NONE, 0, nildeps, nil, 0, 0, nil, instance}
+	if r.getInstance(replica, instance) == nil {
+		r.setInstance(replica, instance, &Instance{nil, 0, epaxosproto.NONE, 0, nildeps, nil, 0, 0, nil, instance})
 	}
 
-	inst := r.InstanceSpace[replica][instance]
+	inst := r.getInstance(replica, instance)
 	if inst.lb == nil {
 		inst.lb = &LeaderBookkeeping{nil, -1, 0, false, 0, 0, 0, nildeps, nil, nil, true, false, nil, 0, time.Time{}, time.Time{},
 			time.Time{}, make([]time.Time, len(r.PeerAddrList))}
@@ -1606,18 +1764,18 @@ func (r *Replica) startRecoveryForInstance(replica int32, instance int32) {
 }
 
 func (r *Replica) handlePrepare(prepare *epaxosproto.Prepare) {
-	inst := r.InstanceSpace[prepare.Replica][prepare.Instance]
+	inst := r.getInstance(prepare.Replica, prepare.Instance)
 	var preply *epaxosproto.PrepareReply
 	var nildeps [DS]int32
 
 	if inst == nil {
-		r.InstanceSpace[prepare.Replica][prepare.Instance] = &Instance{
+		r.setInstance(prepare.Replica, prepare.Instance, &Instance{
 			nil,
 			prepare.Ballot,
 			epaxosproto.NONE,
 			0,
 			nildeps,
-			nil, 0, 0, nil, prepare.Instance}
+			nil, 0, 0, nil, prepare.Instance})
 		preply = &epaxosproto.PrepareReply{
 			r.Id,
 			prepare.Replica,
@@ -1651,7 +1809,7 @@ func (r *Replica) handlePrepare(prepare *epaxosproto.Prepare) {
 }
 
 func (r *Replica) handlePrepareReply(preply *epaxosproto.PrepareReply) {
-	inst := r.InstanceSpace[preply.Replica][preply.Instance]
+	inst := r.getInstance(preply.Replica, preply.Instance)
 
 	if inst.lb == nil || !inst.lb.preparing {
 		// we've moved on -- these are delayed replies, so just ignore
@@ -1670,13 +1828,13 @@ func (r *Replica) handlePrepareReply(preply *epaxosproto.PrepareReply) {
 	inst.lb.prepareOKs++
 
 	if preply.Status == epaxosproto.COMMITTED || preply.Status == epaxosproto.EXECUTED {
-		r.InstanceSpace[preply.Replica][preply.Instance] = &Instance{
+		r.setInstance(preply.Replica, preply.Instance, &Instance{
 			preply.Command,
 			inst.ballot,
 			epaxosproto.COMMITTED,
 			preply.Seq,
 			preply.Deps,
-			nil, 0, 0, nil, preply.Instance}
+			nil, 0, 0, nil, preply.Instance})
 		r.bcastCommit(preply.Replica, preply.Instance, inst.Cmds, preply.Seq, preply.Deps)
 		//TODO: check if we should send notifications to clients
 		return
@@ -1737,7 +1895,7 @@ func (r *Replica) handlePrepareReply(preply *epaxosproto.PrepareReply) {
 				inst.lb.possibleQuorum[q] = true
 			}
 			if conf, q, i := r.findPreAcceptConflicts(ir.cmds, preply.Replica, preply.Instance, ir.seq, ir.deps); conf {
-				if r.InstanceSpace[q][i].Status >= epaxosproto.COMMITTED {
+				if r.getInstance(q, i).Status >= epaxosproto.COMMITTED {
 					//start Phase1 in the initial leader's instance
 					r.startPhase1(preply.Replica, preply.Instance, inst.ballot, inst.lb.clientProposals, ir.cmds, len(ir.cmds))
 					return
@@ -1766,19 +1924,19 @@ func (r *Replica) handlePrepareReply(preply *epaxosproto.PrepareReply) {
 		// commands that depended on this instance must look at all previous instances
 		noop_deps[preply.Replica] = preply.Instance - 1
 		inst.lb.preparing = false
-		r.InstanceSpace[preply.Replica][preply.Instance] = &Instance{
+		r.setInstance(preply.Replica, preply.Instance, &Instance{
 			nil,
 			inst.ballot,
 			epaxosproto.ACCEPTED,
 			0,
 			noop_deps,
-			inst.lb, 0, 0, nil, preply.Instance}
+			inst.lb, 0, 0, nil, preply.Instance})
 		r.bcastAccept(preply.Replica, preply.Instance, inst.ballot, 0, 0, noop_deps)
 	}
 }
 
 func (r *Replica) handleTryPreAccept(tpa *epaxosproto.TryPreAccept) {
-	inst := r.InstanceSpace[tpa.Replica][tpa.Instance]
+	inst := r.getInstance(tpa.Replica, tpa.Instance)
 	if inst != nil && inst.ballot > tpa.Ballot {
 		// ballot number too small
 		r.replyTryPreAccept(tpa.LeaderId, &epaxosproto.TryPreAcceptReply{
@@ -1801,7 +1959,7 @@ func (r *Replica) handleTryPreAccept(tpa *epaxosproto.TryPreAccept) {
 			inst.ballot,
 			confRep,
 			confInst,
-			r.InstanceSpace[confRep][confInst].Status})
+			r.getInstance(confRep, confInst).Status})
 	} else {
 		// can pre-accept
 		if tpa.Instance >= r.crtInstance[tpa.Replica] {
@@ -1814,7 +1972,7 @@ func (r *Replica) handleTryPreAccept(tpa *epaxosproto.TryPreAccept) {
 			inst.Status = epaxosproto.PREACCEPTED
 			inst.ballot = tpa.Ballot
 		} else {
-			r.InstanceSpace[tpa.Replica][tpa.Instance] = &Instance{
+			r.setInstance(tpa.Replica, tpa.Instance, &Instance{
 				tpa.Command,
 				tpa.Ballot,
 				epaxosproto.PREACCEPTED,
@@ -1822,14 +1980,14 @@ func (r *Replica) handleTryPreAccept(tpa *epaxosproto.TryPreAccept) {
 				tpa.Deps,
 				nil, 0, 0,
 				nil,
-				tpa.Instance}
+				tpa.Instance})
 		}
 		r.replyTryPreAccept(tpa.LeaderId, &epaxosproto.TryPreAcceptReply{r.Id, tpa.Replica, tpa.Instance, TRUE, inst.ballot, 0, 0, 0})
 	}
 }
 
 func (r *Replica) findPreAcceptConflicts(cmds []state.Command, replica int32, instance int32, seq int32, deps [DS]int32) (bool, int32, int32) {
-	inst := r.InstanceSpace[replica][instance]
+	inst := r.getInstance(replica, instance)
 	if inst != nil && len(inst.Cmds) > 0 {
 		if inst.Status >= epaxosproto.ACCEPTED {
 			// already ACCEPTED or COMMITTED
@@ -1852,7 +2010,7 @@ func (r *Replica) findPreAcceptConflicts(cmds []state.Command, replica int32, in
 				//the instance cannot be a dependency for itself
 				continue
 			}
-			inst := r.InstanceSpace[q][i]
+			inst := r.getInstance(q, i)
 			if inst == nil || inst.Cmds == nil || len(inst.Cmds) == 0 {
 				continue
 			}
@@ -1874,7 +2032,7 @@ func (r *Replica) findPreAcceptConflicts(cmds []state.Command, replica int32, in
 }
 
 func (r *Replica) handleTryPreAcceptReply(tpar *epaxosproto.TryPreAcceptReply) {
-	inst := r.InstanceSpace[tpar.Replica][tpar.Instance]
+	inst := r.getInstance(tpar.Replica, tpar.Instance)
 	if inst == nil || inst.lb == nil || !inst.lb.tryingToPreAccept || inst.lb.recoveryInst == nil {
 		return
 	}
