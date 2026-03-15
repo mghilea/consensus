@@ -40,6 +40,7 @@ const HT_INIT_SIZE = 200000
 const CHECKPOINT_PERIOD = 10000
 
 const COMPACTION_SLEEP_INTERVAL = 10 * time.Millisecond
+const PREALLOCATED_INSTANCE_SPACE = 15*1024*1024
 
 var cpMarker []state.Command
 var cpcounter = 0
@@ -180,7 +181,7 @@ func NewReplica(shardIdx int, id int, peerAddrList []string, masterAddr string, 
 	r.Durable = durable
 
 	for i := 0; i < r.N; i++ {
-		r.InstanceSpace[i] = make([]*Instance, 5*1024*1024)
+		r.InstanceSpace[i] = make([]*Instance, PREALLOCATED_INSTANCE_SPACE)
 		r.crtInstance[i] = 0
 		r.ExecedUpTo[i] = -1
 		r.conflicts1[i] = make(map[state.Key]map[state.Operation]int32, HT_INIT_SIZE)
@@ -215,7 +216,7 @@ func NewReplica(shardIdx int, id int, peerAddrList []string, masterAddr string, 
 }
 
 func (r *Replica) getInstance(i int32, j int32) *Instance {
-	if int32(len(r.logOffset)) < i {
+	if i < 0 || i >= int32(len(r.InstanceSpace)) {
 		return nil
 	}
 
@@ -223,35 +224,19 @@ func (r *Replica) getInstance(i int32, j int32) *Instance {
 		return nil
 	}
 
-	if i >= int32(len(r.InstanceSpace)) {
-		return nil
-	}
-
-	if j >= int32(len(r.InstanceSpace[i])) {
-		return nil
-	}
-
-	return r.InstanceSpace[i][j]
+	return r.InstanceSpace[i][j%PREALLOCATED_INSTANCE_SPACE]
 }
 
 func (r *Replica) setInstance(i int32, j int32,  inst *Instance) {
-	if int32(len(r.logOffset)) < i {
-		log.Fatal("Replica index %d out of range", i)
+	if i < 0 || i >= int32(len(r.InstanceSpace)) {
+		log.Fatalf("Replica index %d out of range", i)
 	}
 
 	if j < r.logOffset[i] {
 		log.Fatal("Instance index %d out of range", i)
 	}
 
-	if i >= int32(len(r.InstanceSpace)) {
-		log.Fatal("Replica index %d out of range", i)
-	}
-
-	if j >= int32(len(r.InstanceSpace[i])) {
-		log.Fatal("Instance index %d out of range", i)
-	}
-
-	r.InstanceSpace[i][j] = inst
+	r.InstanceSpace[i][j%PREALLOCATED_INSTANCE_SPACE] = inst
 }
 
 func (r *Replica) runSnapshotCompaction() {
@@ -266,8 +251,9 @@ func (r *Replica) runSnapshotCompaction() {
 				trim := int(r.ExecedUpTo[q] - r.logOffset[q])
 				if trim > 0 { 
 					trimCount[q] = trim
-					insts := r.InstanceSpace[q][r.logOffset[q] : r.logOffset[q]+int32(trim)] 
-					toCompact = append(toCompact, insts...) 
+					for i := r.logOffset[q]; i < r.logOffset[q]+int32(trim); i++ {
+						toCompact = append(toCompact, r.getInstance(q, i))
+					}
 				}
 			}
 		}
@@ -336,9 +322,18 @@ func (r *Replica) serializeInstancesSnapshot(instances []*Instance) []byte {
 		}
 	}
 
-	// write snapshot
+	// write number of replicas
+	binary.Write(buf, binary.LittleEndian, int32(r.N))
+
+	// write execedUpTo for each replica
+	for q := 0; q < r.N; q++ {
+		binary.Write(buf, binary.LittleEndian, r.ExecedUpTo[q])
+	}
+
+	// write command count
 	binary.Write(buf, binary.LittleEndian, int32(len(latest)))
 
+	// write the key-value pairs in the snapshot
 	for _, cmd := range latest {
 		cmd.Marshal(buf)
 	}
@@ -359,6 +354,18 @@ func (r *Replica) readSnapshot() map[int64]state.Command {
 	}
 
 	buf := bytes.NewBuffer(data)
+
+	var numReplicas int32
+	if err := binary.Read(buf, binary.LittleEndian, &numReplicas); err != nil {
+		return latest
+	}
+
+	execedUpTo := make([]int32, numReplicas)
+	for q := 0; q < int(numReplicas); q++{
+		if err := binary.Read(buf, binary.LittleEndian, &execedUpTo[q]); err != nil {
+			return latest
+		}
+	}
 
 	var count int32
 	if err := binary.Read(buf, binary.LittleEndian, &count); err != nil {
@@ -1082,6 +1089,11 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	}
 
 	instNo := r.crtInstance[r.Id]
+	for r.crtInstance[r.Id] >= r.logOffset[r.Id] + PREALLOCATED_INSTANCE_SPACE {
+		// block for compaction to free up space
+		time.Sleep(COMPACTION_SLEEP_INTERVAL)
+		continue
+	}
 	r.crtInstance[r.Id]++
 
 	dlog.Printf("Starting instance %d\n", instNo)
@@ -1142,6 +1154,11 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 
 		//Propose a checkpoint command to act like a barrier.
 		//This allows replicas to discard their dependency hashtables.
+		for r.crtInstance[r.Id] >= r.logOffset[r.Id] + PREALLOCATED_INSTANCE_SPACE {
+			// block for compaction to free up space
+			time.Sleep(COMPACTION_SLEEP_INTERVAL)
+			continue
+		}
 		r.crtInstance[r.Id]++
 		instance++
 

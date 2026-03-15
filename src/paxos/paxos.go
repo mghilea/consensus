@@ -25,6 +25,7 @@ const FALSE = uint8(0)
 const MAX_BATCH = 5000
 const EPOCH_LENGTH = 500
 const COMPACTION_SLEEP_INTERVAL = 10 * time.Millisecond
+const PREALLOCATED_INSTANCE_SPACE = 15*1024*1024
 
 type Replica struct {
 	*genericsmr.Replica // extends a generic Paxos replica
@@ -94,7 +95,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		make(chan fastrpc.Serializable, 3*genericsmr.CHAN_BUFFER_SIZE),
 		0, 0, 0, 0, 0, 0,
 		false,
-		make([]*Instance, 15*1024*1024),
+		make([]*Instance, PREALLOCATED_INSTANCE_SPACE),
 		0,
 		-1,
 		false,
@@ -131,11 +132,7 @@ func (r *Replica) getInstance(i int32) *Instance {
 		return nil
 	}
 
-	if i >= int32(len(r.instanceSpace)) {
-		return nil
-	}
-
-	return r.instanceSpace[i]
+	return r.instanceSpace[i%PREALLOCATED_INSTANCE_SPACE]
 }
 
 func (r *Replica) setInstance(i int32, inst *Instance) {
@@ -143,11 +140,7 @@ func (r *Replica) setInstance(i int32, inst *Instance) {
 		return
 	}
 
-	if i >= int32(len(r.instanceSpace)) {
-		log.Fatal("Instance index %d out of range", i)
-	}
-
-	r.instanceSpace[i] = inst
+	r.instanceSpace[i%PREALLOCATED_INSTANCE_SPACE] = inst
 }
 
 func (r *Replica) serializeInstancesSnapshot(instances []*Instance) []byte {
@@ -168,9 +161,13 @@ func (r *Replica) serializeInstancesSnapshot(instances []*Instance) []byte {
 		}
 	}
 
-	// write snapshot
+	// write committedUpTo
+	binary.Write(buf, binary.LittleEndian, r.committedUpTo)
+
+	// write command count
 	binary.Write(buf, binary.LittleEndian, int32(len(latest)))
 
+	// write the key-value pairs in the snapshot
 	for _, cmd := range latest {
 		cmd.Marshal(buf)
 	}
@@ -187,7 +184,11 @@ func (r *Replica) runSnapshotCompaction() {
 
 			trimCount := int(r.committedUpTo - r.logOffset)
 			if trimCount > 0 {
-				toCompact := r.instanceSpace[r.logOffset:r.logOffset+int32(trimCount)]
+				toCompact := make([]*Instance, 0, trimCount)
+
+				for i := r.logOffset; i < r.logOffset+int32(trimCount); i++ {
+					toCompact = append(toCompact, r.getInstance(i))
+				}
 
 				// serialize only latest commands per key
 				data := r.serializeInstancesSnapshot(toCompact)
@@ -210,7 +211,7 @@ func (r *Replica) runSnapshotCompaction() {
 
 				// free up in-memory instanceSpace
 				for i := r.logOffset; i < r.logOffset + int32(trimCount); i++ {
-					r.instanceSpace[i] = nil
+					r.setInstance(i, nil)
 				}
 				r.logOffset += int32(trimCount)
 
@@ -236,6 +237,11 @@ func (r *Replica) readSnapshot() map[int64]state.Command {
 	}
 
 	buf := bytes.NewBuffer(data)
+
+	var committedUpTo int32
+    if err := binary.Read(buf, binary.LittleEndian, &committedUpTo); err != nil {
+        return latest
+    }
 
 	var count int32
 	if err := binary.Read(buf, binary.LittleEndian, &count); err != nil {
@@ -584,6 +590,12 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL, 0, propose.ClientId}
 		r.ReplyProposeTS(preply, propose.Reply)
 		return
+	}
+
+	for r.crtInstance >= r.logOffset+int32(len(r.instanceSpace)) {
+		// block for compaction to free up space
+		time.Sleep(COMPACTION_SLEEP_INTERVAL)
+		continue
 	}
 
 	for r.getInstance(r.crtInstance) != nil {

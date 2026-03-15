@@ -140,7 +140,7 @@
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 16,
-  "server_max_processors": 2,
+  "server_max_processors": 1,
   "client_num_keys": 1000000,
   "client_ramp_down": 30,
   "client_ramp_up": 30,
@@ -182,5 +182,5 @@
   "server_gc_debug_trace": false,
   "server_memprofile": false,
   "snapshot_enabled": true,
-  "max_instance_space_size": 20000
+  "max_instance_space_size": 50000
 }
