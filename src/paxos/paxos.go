@@ -186,8 +186,20 @@ func (r *Replica) runSnapshotCompaction() {
 			if trimCount > 0 {
 				toCompact := make([]*Instance, 0, trimCount)
 
-				for i := r.logOffset; i < r.logOffset+int32(trimCount); i++ {
-					toCompact = append(toCompact, r.getInstance(i))
+				cap := int32(PREALLOCATED_INSTANCE_SPACE)
+				start := r.logOffset % cap
+				end := (r.logOffset + int32(trim)) % cap
+
+				if start < end {
+					// no wrap
+					toCompact = append(toCompact,
+						r.InstanceSpace[start:end]...)
+				} else {
+					// wrapped
+					toCompact = append(toCompact,
+						r.InstanceSpace[start:cap]...)
+					toCompact = append(toCompact,
+						r.InstanceSpace[0:end]...)
 				}
 
 				// serialize only latest commands per key

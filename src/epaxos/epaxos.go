@@ -251,8 +251,21 @@ func (r *Replica) runSnapshotCompaction() {
 				trim := int(r.ExecedUpTo[q] - r.logOffset[q])
 				if trim > 0 { 
 					trimCount[q] = trim
-					for i := r.logOffset[q]; i < r.logOffset[q]+int32(trim); i++ {
-						toCompact = append(toCompact, r.getInstance(q, i))
+
+					cap := int32(PREALLOCATED_INSTANCE_SPACE)
+					start := r.logOffset[q] % cap
+					end := (r.logOffset[q] + int32(trim)) % cap
+
+					if start < end {
+						// no wrap
+						toCompact = append(toCompact,
+							r.InstanceSpace[q][start:end]...)
+					} else {
+						// wrapped
+						toCompact = append(toCompact,
+							r.InstanceSpace[q][start:cap]...)
+						toCompact = append(toCompact,
+							r.InstanceSpace[q][0:end]...)
 					}
 				}
 			}
