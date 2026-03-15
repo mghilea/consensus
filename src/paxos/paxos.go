@@ -188,18 +188,18 @@ func (r *Replica) runSnapshotCompaction() {
 
 				cap := int32(PREALLOCATED_INSTANCE_SPACE)
 				start := r.logOffset % cap
-				end := (r.logOffset + int32(trim)) % cap
+				end := (r.logOffset + int32(trimCount)) % cap
 
 				if start < end {
 					// no wrap
 					toCompact = append(toCompact,
-						r.InstanceSpace[start:end]...)
+						r.instanceSpace[start:end]...)
 				} else {
 					// wrapped
 					toCompact = append(toCompact,
-						r.InstanceSpace[start:cap]...)
+						r.instanceSpace[start:cap]...)
 					toCompact = append(toCompact,
-						r.InstanceSpace[0:end]...)
+						r.instanceSpace[0:end]...)
 				}
 
 				// serialize only latest commands per key
