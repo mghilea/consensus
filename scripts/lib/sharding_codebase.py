@@ -114,9 +114,9 @@ class ShardingCodebase(ExperimentCodebase):
         if 'server_epaxos_mode' in config['replication_protocol_settings'] and config['replication_protocol_settings']['server_epaxos_mode']:
             client_command += ' -epaxosMode'
 
-        if 'server_emulate_wan' in config and not config['server_emulate_wan']:
-            client_command += ' -defaultReplicaOrder'
-            client_command += ' -forceLeader %d' % i
+        # if 'server_emulate_wan' in config and not config['server_emulate_wan']:
+        #     client_command += ' -defaultReplicaOrder'
+        #     client_command += ' -forceLeader %d' % i
 
         if config['replication_protocol'] == 'abd':
             if config['replication_protocol_settings']['client_regular_consistency']:
