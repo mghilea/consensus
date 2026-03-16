@@ -5,6 +5,7 @@ import (
 	"dlog"
 	"fastrpc"
 	"genericsmrproto"
+	"log"
 	"state"
 )
 
@@ -118,6 +119,7 @@ func (c *ProposeClient) sendPropose() {
 				replica = c.forceLeader
 			} else {
 				replica = int(c.replicasByPingRank[shard][0])
+				log.Printf("Client %d sending propose request to replica %d", c.id, replica)
 			}
 			c.replicaWriters[shard][replica].WriteByte(clientproto.GEN_PROPOSE)
 			c.propose.Marshal(c.replicaWriters[shard][replica])
