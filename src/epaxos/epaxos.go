@@ -258,8 +258,7 @@ func (r *Replica) runSnapshotCompaction() {
 
 					if start < end {
 						// no wrap
-						toCompact = append(toCompact,
-							r.InstanceSpace[q][start:end]...)
+						toCompact = r.InstanceSpace[q][start:end]
 					} else {
 						// wrapped
 						toCompact = append(toCompact,

@@ -192,8 +192,7 @@ func (r *Replica) runSnapshotCompaction() {
 
 				if start < end {
 					// no wrap
-					toCompact = append(toCompact,
-						r.instanceSpace[start:end]...)
+					toCompact = r.instanceSpace[start:end]
 				} else {
 					// wrapped
 					toCompact = append(toCompact,
@@ -604,7 +603,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		return
 	}
 
-	for r.crtInstance >= r.logOffset+int32(len(r.instanceSpace)) {
+	for r.crtInstance >= r.logOffset+int32(PREALLOCATED_INSTANCE_SPACE) {
 		// block for compaction to free up space
 		time.Sleep(COMPACTION_SLEEP_INTERVAL)
 		continue
