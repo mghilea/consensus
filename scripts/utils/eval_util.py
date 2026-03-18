@@ -7,7 +7,7 @@ import traceback
 import subprocess
 import concurrent
 import collections
-import datetime
+from datetime import datetime
 
 def convert_latency_nanos_to_millis(latencies):
     return list(map(lambda x: x / 1e6, latencies))
