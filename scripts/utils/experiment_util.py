@@ -554,6 +554,11 @@ def run_experiment(config_file, client_config_idx, executor):
                 config['client_processes_per_client_node'] * \
                 len(config['server_names'])
 
+        if 'shuffle_shard_leaders' in config and config['shuffle_shard_leaders']:
+            config['shards'] = shuffle_shard_leaders(config['num_shards'], config['server_names'])
+
+        print('Set up config shards: ', config['shards'])
+
         if is_exp_remote(config):
             print('Setting up emulated WAN latencies.')
             wan = is_emulate_wan(config)
@@ -628,6 +633,17 @@ def run_experiment(config_file, client_config_idx, executor):
         return executor.submit(collect_and_calculate, config,
                             client_config_idx, remote_exp_directory, local_out_directory,
                             executor)
+
+def shuffle_shard_leaders(num_shards, server_names):
+    n = len(server_names)
+
+    shards = []
+    for i in range(num_shards):
+        leader_index = i % n
+        shard = servers[leader_index:] + servers[:leader_index]
+        shards.append(shard)
+
+    return shards
 
 
 def run_multiple_experiments(config_file, executor):
