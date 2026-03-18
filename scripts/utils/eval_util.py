@@ -7,6 +7,7 @@ import traceback
 import subprocess
 import concurrent
 import collections
+import datetime
 
 def convert_latency_nanos_to_millis(latencies):
     return list(map(lambda x: x / 1e6, latencies))
@@ -427,14 +428,42 @@ def generate_gnuplot_script_agg(plot, plot_script_file, plot_out_file, series):
             if i != len(series) - 1:
                 f.write(', \\\n')
 
-# def collect_aggregate_stats(config, base_out_directory, out_dirs):
-#     # Collect stats at 
+def collect_aggregate_stats(config, sub_out_dirs, out_dirs):
+    for i in range(len(out_dirs)):
+        # Experiment out directory
+        out_dir = out_dirs[i]
 
-#     # Save aggregate stats to file
-#     stats_file = config.get('stats_file_name', "stats.json")
-#     stats_path = os.path.join(local_out_directory, stats_file)
-#     with open(stats_path, 'w') as f:
-#         json.dump(stats, f, indent=2, sort_keys=True)
+        # Aggregate stats data structures
+        p50 = []
+        p99 = []
+        tput = []
+        tput_over_time = []
+
+        # Collect stats from sub-directories
+        sub_out_directories = sub_out_dirs[i][0]
+
+        for sub_dir in sub_out_directories:
+            # Read stats file and add the data to the aggregate stats
+            stats_file = os.path.join(sub_dir, config['stats_file_name'])
+            with open(stats_file) as f:
+                stats = json.load(f)
+                p50.append(stats["app"]["p50"])
+                p99.append(stats["app"]["p99"])
+                tput.append(stats["app"]["tput"])
+                tput_over_time.append(stats["app"]["tput_over_time"])
+
+        agg_stats = []
+        agg_stats["p50"] = p50
+        agg_stats["p99"] = p99
+        agg_stats["tput"] = tput
+        agg_stats["tput_over_time"] = tput_over_time
+
+        # Save aggregate stats to file
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        agg_stats_file = f"{config["replication_protocol"][i]}_stats_{timestamp}.json"
+        agg_stats_path = os.path.join(local_out_directory, stats_file)
+        with open(stats_path, 'w') as f:
+            json.dump(stats, f, indent=2, sort_keys=True)
 
 def generate_plots(config, base_out_directory, out_dirs):
     plots_directory = os.path.join(base_out_directory, config['plot_directory_name'])
