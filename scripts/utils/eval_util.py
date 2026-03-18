@@ -452,7 +452,7 @@ def collect_aggregate_stats(config, sub_out_dirs, out_dirs):
                 tput.append(stats["run_stats"]["app"]["tput"])
                 tput_over_time.append(stats["aggregate"]["write"]["tput_over_time"])
 
-        agg_stats = []
+        agg_stats = {}
         agg_stats["p50"] = p50
         agg_stats["p99"] = p99
         agg_stats["tput"] = tput
