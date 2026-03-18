@@ -640,7 +640,7 @@ def shuffle_shard_leaders(num_shards, server_names):
     shards = []
     for i in range(num_shards):
         leader_index = i % n
-        shard = servers[leader_index:] + servers[:leader_index]
+        shard = server_names[leader_index:] + server_names[:leader_index]
         shards.append(shard)
 
     return shards
