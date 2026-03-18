@@ -731,6 +731,7 @@ def run_multiple_experiments(config_file, executor):
         print(exp_dir)
         out = [sub_out_dirs, out_dirs]
         generate_plots(config, exp_dir, out)
+        time.sleep(5)
         collect_aggregate_stats(config, sub_out_dirs, out_dirs)
     return exp_dir, out
 
