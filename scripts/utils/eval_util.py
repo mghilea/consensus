@@ -461,7 +461,7 @@ def collect_aggregate_stats(config, sub_out_dirs, out_dirs):
         # Save aggregate stats to file
         timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         agg_stats_file = f"{config['replication_protocol'][i]}_stats_{timestamp}.json"
-        agg_stats_path = os.path.join(local_out_directory, stats_file)
+        agg_stats_path = os.path.join(out_dir, stats_file)
         with open(stats_path, 'w') as f:
             json.dump(stats, f, indent=2, sort_keys=True)
 
