@@ -432,6 +432,7 @@ def collect_aggregate_stats(config, sub_out_dirs, out_dirs):
     for i in range(len(out_dirs)):
         # Experiment out directory
         out_dir = out_dirs[i]
+        print("Out dir: ", out_dir)
 
         # Aggregate stats data structures
         p50 = []
@@ -441,6 +442,7 @@ def collect_aggregate_stats(config, sub_out_dirs, out_dirs):
 
         # Collect stats from sub-directories
         sub_out_directories = sub_out_dirs[i][0]
+        print("Sub-out directories: ", sub_out_directories)
 
         for sub_dir in sub_out_directories:
             # Read stats file and add the data to the aggregate stats
