@@ -440,6 +440,7 @@ def collect_and_calculate(config, client_config_idx, remote_exp_directory, local
 
     # Delete the contents of the local directory (except the stats.json file) if debug mode is off
     if should_delete_files:
+        time.sleep(5)
         clean_local_out_directory(local_out_directory)
 
     return local_out_directory
