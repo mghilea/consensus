@@ -427,6 +427,15 @@ def generate_gnuplot_script_agg(plot, plot_script_file, plot_out_file, series):
             if i != len(series) - 1:
                 f.write(', \\\n')
 
+# def collect_aggregate_stats(config, base_out_directory, out_dirs):
+#     # Collect stats at 
+
+#     # Save aggregate stats to file
+#     stats_file = config.get('stats_file_name', "stats.json")
+#     stats_path = os.path.join(local_out_directory, stats_file)
+#     with open(stats_path, 'w') as f:
+#         json.dump(stats, f, indent=2, sort_keys=True)
+
 def generate_plots(config, base_out_directory, out_dirs):
     plots_directory = os.path.join(base_out_directory, config['plot_directory_name'])
     os.makedirs(plots_directory, exist_ok=True)
