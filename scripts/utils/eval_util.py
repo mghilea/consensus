@@ -447,10 +447,10 @@ def collect_aggregate_stats(config, sub_out_dirs, out_dirs):
             stats_file = os.path.join(sub_dir, config['stats_file_name'])
             with open(stats_file) as f:
                 stats = json.load(f)
-                p50.append(stats["app"]["p50"])
-                p99.append(stats["app"]["p99"])
-                tput.append(stats["app"]["tput"])
-                tput_over_time.append(stats["app"]["tput_over_time"])
+                p50.append(stats["run_stats"]["app"]["p50"])
+                p99.append(stats["run_stats"]["app"]["p99"])
+                tput.append(stats["run_stats"]["app"]["tput"])
+                tput_over_time.append(stats["aggregate"]["write"]["tput_over_time"])
 
         agg_stats = []
         agg_stats["p50"] = p50
