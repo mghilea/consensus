@@ -213,7 +213,7 @@ class ShardingCodebase(ExperimentCodebase):
 
         # Turn OFF unwanted CPUs
         if config['server_max_processors'] < total_cpus:
-            cmd += (
+            replica_command += (
                 "for i in $(seq %d %d); do "
                 "echo 0 | sudo tee /sys/devices/system/cpu/cpu$i/online; "
                 "done; "

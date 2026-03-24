@@ -9,12 +9,12 @@
   "replication_protocol_settings": [
     {
 	    "server_delay_reply": true,
-      "server_execute_commands": false,
+      "server_execute_commands": true,
       "server_thrifty": true
     },
     {
 	    "server_delay_reply": true,
-      "server_execute_commands": false,
+      "server_execute_commands": true,
       "server_thrifty": true
     }
 
