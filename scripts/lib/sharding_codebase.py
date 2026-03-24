@@ -207,7 +207,7 @@ class ShardingCodebase(ExperimentCodebase):
         # Turn all CPU cores ON (reset from previous experiment)
         replica_command += (
             "for i in $(seq 1 %d); do "
-            "sudo sh -c 'echo 1 > /sys/devices/system/cpu/cpu$i/online';"
+            "sudo sh -c \"echo 1 > /sys/devices/system/cpu/cpu$i/online\";"
             "done; "
         ) % (total_cpus - 1)
 
@@ -215,7 +215,7 @@ class ShardingCodebase(ExperimentCodebase):
         if config['server_max_processors'] < total_cpus:
             replica_command += (
                 "for i in $(seq %d %d); do "
-                "sudo sh -c 'echo 0 > /sys/devices/system/cpu/cpu$i/online';"
+                "sudo sh -c \"echo 0 > /sys/devices/system/cpu/cpu$i/online\";"
                 "done; "
             ) % (config['server_max_processors'], total_cpus - 1)
         

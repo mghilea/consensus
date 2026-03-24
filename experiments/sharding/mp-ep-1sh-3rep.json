@@ -134,7 +134,7 @@
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 16,
-  "server_max_processors": 1,
+  "server_max_processors": 3,
   "client_num_keys": 1000000,
   "client_ramp_down": 30,
   "client_ramp_up": 30,
