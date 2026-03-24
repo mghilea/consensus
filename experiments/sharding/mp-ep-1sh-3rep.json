@@ -9,12 +9,12 @@
   "replication_protocol_settings": [
     {
 	    "server_delay_reply": true,
-      "server_execute_commands": true,
+      "server_execute_commands": false,
       "server_thrifty": true
     },
     {
 	    "server_delay_reply": true,
-      "server_execute_commands": true,
+      "server_execute_commands": false,
       "server_thrifty": true
     }
 
@@ -59,12 +59,12 @@
       }
   },
  "client_total": [
-    [1, 4, 8, 16, 20, 30, 40],
-    [1, 4, 8, 16, 20, 30, 40]
+    [20],
+    [20]
   ],
   "client_processes_per_client_node": [
-    [1, 4, 8, 16, 20, 30, 40],
-    [1, 4, 8, 16, 20, 30, 40]
+    [20],
+    [20]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -142,7 +142,7 @@
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "rghilea-294138",
+  "experiment_name": "rghilea-296320",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,
