@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"masterproto"
+	"math/rand"
 	"net"
 	"net/rpc"
 	"state"
@@ -357,7 +358,14 @@ func (c *AbstractClient) DetermineReplicaPings() {
 			}
 			rank[j], rank[minIndex] = rank[minIndex], rank[j]
 		}
+
+		// shuffle in-place
+		rand.Shuffle(len(rank), func(a, b int) {
+			rank[a], rank[b] = rank[b], rank[a]
+		})
+
 		c.replicasByPingRank[i] = rank
+
 		log.Printf("Ordered replicasByPingRank[%d] = %v\n", i, rank)
 	}
 	log.Printf("Successfully pinged all replicas!\n")
