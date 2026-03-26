@@ -921,7 +921,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 func (r *Replica) executeCommands() {
 	i := int32(r.logOffset)
 	for !r.Shutdown {
-		executed := false
+		// executed := false
 
 		for i <= r.committedUpTo {
 			inst := r.getInstance(i)
@@ -945,15 +945,15 @@ func (r *Replica) executeCommands() {
 					}
 				}
 				i++
-				executed = true
+				// executed = true
 			} else {
 				break
 			}
 		}
 
-		if !executed {
-			time.Sleep(1000 * 1000)
-		}
+		// if !executed {
+		// 	time.Sleep(1000 * 1000)
+		// }
 	}
 
 }
