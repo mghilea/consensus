@@ -945,15 +945,15 @@ func (r *Replica) executeCommands() {
 					}
 				}
 				i++
-				//executed = true
+				executed = true
 			} else {
 				break
 			}
 		}
 
-		//if !executed {
-		//	time.Sleep(1000 * 1000)
-		//}
+		if !executed {
+			time.Sleep(1000 * 1000)
+		}
 	}
 
 }
