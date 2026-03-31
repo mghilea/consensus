@@ -338,7 +338,21 @@ func (c *AbstractClient) DetermineReplicaPings() {
 		}
 	}
 
-	// mini selection sort
+	// Determine if it's LAN setting
+	min, max := c.replicaPing[0][0], c.replicaPing[0][len(c.replicaPing[0])-1]
+    for _, v := range c.replicaPing[0] {
+        if v < min {
+            min = v
+        }
+        if v > max {
+            max = v
+        }
+    }
+
+	diff := time.Duration(max - min)
+    isLANsetting := diff < 2*time.Millisecond
+    log.Printf("isLANsetting=%t\n", isLANsetting)
+
 	for i := range c.replicasByPingRank {
 		for j := range c.replicasByPingRank[i] {
 			c.replicasByPingRank[i][j] = int32(j)
@@ -346,24 +360,34 @@ func (c *AbstractClient) DetermineReplicaPings() {
 		log.Printf("replicaPing[%d]=%v\n", i, c.replicaPing[i])
 	}
 
-	// isLANsetting = max(c.replicaPing[0]) - min(c.replicaPing[0])
-
-	for i := 0; i < len(c.replicasByPingRank); i++ {
-		rank := c.replicasByPingRank[i]
-		log.Printf("ReplicaPing[%d] = %v\n", i, c.replicaPing[i])
-		for j := 0; j < len(rank); j++ {
-			minIndex := j
-			for k := j + 1; k < len(rank); k++ {
-				if c.replicaPing[i][rank[k]] < c.replicaPing[i][rank[minIndex]] {
-					minIndex = k
-				}
-			}
-			rank[j], rank[minIndex] = rank[minIndex], rank[j]
+	if isLANsetting {
+		// assign replicas round-robin in LAN
+		for i := 0; i < len(c.replicasByPingRank); i++ {
+			pivot := c.id
+			original := c.replicasByPingRank[i]
+        	rank := append(original[pivot:], original[:pivot]...)
+        	c.replicasByPingRank[i] = rank
+			log.Printf("Ordered replicasByPingRank[%d] = %v\n", i, rank)
 		}
+	} else {
+		// sort the replicas based on ping duration in WAN
+		for i := 0; i < len(c.replicasByPingRank); i++ {
+			rank := c.replicasByPingRank[i]
+			log.Printf("ReplicaPing[%d] = %v\n", i, c.replicaPing[i])
+			for j := 0; j < len(rank); j++ {
+				minIndex := j
+				for k := j + 1; k < len(rank); k++ {
+					if c.replicaPing[i][rank[k]] < c.replicaPing[i][rank[minIndex]] {
+						minIndex = k
+					}
+				}
+				rank[j], rank[minIndex] = rank[minIndex], rank[j]
+			}
 
-		c.replicasByPingRank[i] = rank
+			c.replicasByPingRank[i] = rank
 
-		log.Printf("Ordered replicasByPingRank[%d] = %v\n", i, rank)
+			log.Printf("Ordered replicasByPingRank[%d] = %v\n", i, rank)
+		}
 	}
 	log.Printf("Successfully pinged all replicas!\n")
 }
