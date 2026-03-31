@@ -367,7 +367,7 @@ func (c *AbstractClient) DetermineReplicaPings() {
 			original := c.replicasByPingRank[i]
         	rank := append(original[pivot:], original[:pivot]...)
         	c.replicasByPingRank[i] = rank
-			log.Printf("Ordered replicasByPingRank[%d] = %v\n", i, rank)
+			log.Printf("Client %d ordered replicasByPingRank[%d] = %v\n", c.id, i, rank)
 		}
 	} else {
 		// sort the replicas based on ping duration in WAN
