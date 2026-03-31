@@ -363,7 +363,7 @@ func (c *AbstractClient) DetermineReplicaPings() {
 	if isLANsetting {
 		// assign replicas round-robin in LAN
 		for i := 0; i < len(c.replicasByPingRank); i++ {
-			pivot := c.id % len(c.replicasByPingRank)
+			pivot := c.id % int32(len(c.replicasByPingRank))
 			original := c.replicasByPingRank[i]
         	rank := append(original[pivot:], original[:pivot]...)
         	c.replicasByPingRank[i] = rank
