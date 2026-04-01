@@ -72,6 +72,8 @@ def calculate_statistics(config, local_out_directory, delete_files=True):
                             continue
                         data = [run[cat][subcat][s] for run in runs]
                         stats['run_stats'][cat][subcat][s] = calculate_statistics_for_data(data, cdf=False)
+        elif cat == 'server':
+            continue
         elif isinstance(cat_val, dict):
             stats['run_stats'][cat] = {}
             for s, v in cat_val.items():
@@ -100,6 +102,29 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
     output_scale = config.get('output_latency_scale', 1e3)
     blacklist = set(config.get('client_stats_blacklist', []))
     combine_blacklist = set(config.get('client_combine_stats_blacklist', []))
+
+    # Process server stats
+    stats["server"] = {}
+    for shard_idx, shard in enumerate(config["shards"]):
+        for replica_idx, replica in enumerate(shard):
+            server_stats_file = os.path.join(local_out_directory,
+                                                f'server-{shard_idx}',
+                                                f'server-{shard_idx}-{replica_idx}-stats-{run}.json')
+            if os.path.exists(server_stats_file):
+                try:
+                    with open(server_stats_file) as f:
+                        server_stats = json.load(f)
+
+                        if replica not in stats["server"]:
+                            stats["server"][replica] = collections.defaultdict(int)
+
+                        for k, v in server_stats.items():
+                            if k in ["server_inbound_rpcs", "server_outbound_rpcs"] and isinstance(v, (int, float)):
+                                stats["server"][replica][k] += v
+                except json.JSONDecodeError:
+                    print(f"Invalid JSON file {server_stats_file}")
+                if delete_files:
+                    os.remove(server_stats_file)
 
     for region in regions:
         op_latencies = collections.defaultdict(list)
@@ -153,26 +178,6 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
                     print(f"Invalid JSON file {client_stats_file}")
                 if delete_files:
                     os.remove(client_stats_file)
-
-        # Process server stats
-        for shard_idx, shard in enumerate(config["shards"]):
-            for replica_idx, replica in enumerate(shard):
-                if get_region(config, replica) != region:
-                    continue
-                server_stats_file = os.path.join(local_out_directory,
-                                                 f'server-{shard_idx}',
-                                                 f'server-{shard_idx}-{replica_idx}-stats-{run}.json')
-                if os.path.exists(server_stats_file):
-                    try:
-                        with open(server_stats_file) as f:
-                            server_stats = json.load(f)
-                            for k, v in server_stats.items():
-                                if isinstance(v, (int, float)):
-                                    stats[k] = stats.get(k, 0) + v
-                    except json.JSONDecodeError:
-                        print(f"Invalid JSON file {server_stats_file}")
-                    if delete_files:
-                        os.remove(server_stats_file)
 
         # Merge region stats
         for k, v in op_latencies.items():
@@ -439,6 +444,7 @@ def collect_aggregate_stats(config, sub_out_dirs, out_dirs):
         p99 = []
         tput = []
         tput_over_time = []
+        server = []
 
         # Collect stats from sub-directories
         sub_out_directories = sub_out_dirs[i][0]
@@ -453,12 +459,14 @@ def collect_aggregate_stats(config, sub_out_dirs, out_dirs):
                 p99.append(stats["run_stats"]["app"]["p99"]["p99"])
                 tput.append(stats["run_stats"]["app"]["tput"]["mean"])
                 tput_over_time.append(stats["aggregate"]["write"]["tput_over_time"])
+                server.append(stats["runs"][0]["server"])
 
         agg_stats = {}
         agg_stats["p50"] = p50
         agg_stats["p99"] = p99
         agg_stats["tput"] = tput
         agg_stats["tput_over_time"] = tput_over_time
+        agg_stats["server"] = server
 
         # Save aggregate stats to file
         timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -495,6 +503,8 @@ def generate_plots(config, base_out_directory, out_dirs):
                 with open(stats_file) as f:
                     stats = json.load(f)
                 generate_tput_over_time_plot(config, sub_plot_directory,
+                             stats)
+                generate_rpc_count_plot(config, sub_plot_directory,
                              stats)
             else:
                 for od in collecting[0]:
@@ -672,6 +682,114 @@ def generate_csv_for_tput_over_time(csv_file, tput_over_time):
         for sec, tput in enumerate(tput_over_time):
             writer.writerow([sec, tput])
 
+def generate_csv_for_rpc_count(csv_file, server_stats):
+    with open(csv_file, 'w') as f:
+        writer = csv.writer(f)
+
+        for idx, (server, values) in enumerate(server_stats.items()):
+            inbound = values.get('server_inbound_rpcs', 0)
+            outbound = values.get('server_outbound_rpcs', 0)
+
+            writer.writerow([idx, server, inbound, outbound])
+
+def generate_gnuplot_script_rpc_count(config, script_file):
+    with open(script_file, 'w') as f:
+        write_gpi_header(f)
+
+        f.write("set title 'RPC Count per Server'\n")
+        f.write("set xlabel 'Server'\n")
+        f.write("set ylabel 'RPC Count'\n")
+
+        f.write("set terminal pngcairo size %d,%d enhanced font '%s'\n" %
+                (config['plot_cdf_png_width'],
+                 config['plot_cdf_png_height'],
+                 config['plot_cdf_png_font']))
+
+        f.write("set output outfile\n")
+
+        f.write("set xtics rotate by -45\n")
+
+        # Histogram (grouped bars)
+        f.write("set style data histograms\n")
+        f.write("set style histogram clustered gap 1\n")
+        f.write("set style fill solid\n")
+        f.write("set boxwidth 0.9\n")
+
+        write_line_styles(f)
+
+        f.write(
+            "plot "
+            "datafile0 using 3:xtic(2) title 'Inbound', "
+            "'' using 4 title 'Outbound', "
+            "'' using 0:3:(sprintf('%d', $3)) with labels offset -0.2,1 notitle, "
+            "'' using 0:4:(sprintf('%d', $4)) with labels offset 0.2,1 notitle\n"
+        )
+        write_gpi_header(f)
+
+        f.write("set title 'RPC Count per Server'\n")
+        f.write("set xlabel 'Server'\n")
+        f.write("set ylabel 'RPC Count'\n")
+
+        f.write("set terminal pngcairo size %d,%d enhanced font '%s'\n" %
+                (config['plot_cdf_png_width'],
+                 config['plot_cdf_png_height'],
+                 config['plot_cdf_png_font']))
+
+        f.write("set output outfile\n")
+
+        f.write("set xtics rotate by -45\n")
+
+        # Histogram setup
+        f.write("set style data histograms\n")
+        f.write("set style histogram clustered gap 1\n")
+        f.write("set style fill solid\n")
+        f.write("set boxwidth 0.9\n")
+
+        write_line_styles(f)
+
+        f.write(
+            "plot "
+            "datafile0 using 3:xtic(2) title 'Inbound', "
+            "'' using 4 title 'Outbound', "
+            "'' using 0:3:(sprintf('%d', $3)) with labels offset 0,1 notitle, "
+            "'' using 0:4:(sprintf('%d', $4)) with labels offset 0,1 notitle\n"
+        )
+        write_gpi_header(f)
+
+        f.write("set title 'RPC Count per Server'\n")
+        f.write("set xlabel 'Server'\n")
+        f.write("set ylabel 'RPC Count'\n")
+
+        f.write("set terminal pngcairo size %d,%d enhanced font '%s'\n" %
+                (config['plot_cdf_png_width'],
+                 config['plot_cdf_png_height'],
+                 config['plot_cdf_png_font']))
+
+        f.write("set output outfile\n")
+
+        # Rotate labels if long
+        f.write("set xtics rotate by -45\n")
+
+        # Grouped bars setup
+        f.write("set style data histograms\n")
+        f.write("set style histogram clustered gap 1\n")
+        f.write("set style fill solid\n")
+        f.write("set boxwidth 0.9\n")
+
+        write_line_styles(f)
+
+        # Column usage:
+        # col 2 = server name (label)
+        # col 3 = inbound
+        # col 4 = outbound
+        f.write(
+            "plot "
+            "datafile0 using 3:xtic(2) title 'Inbound', "
+            "'' using 4 title 'Outbound', "
+            "'' using ($0-0.15):3:(sprintf('%d', $3)) with labels offset 0,1 notitle, "
+            "'' using ($0+0.15):4:(sprintf('%d', $4)) with labels offset 0,1 notitle\n"
+        )
+
 def generate_gnuplot_script_tput_over_time(config, script_file):
     with open(script_file, 'w') as f:
         write_gpi_header(f)
@@ -707,6 +825,32 @@ def generate_tput_over_time_plot(config, plots_directory, stats):
 
     generate_csv_for_tput_over_time(csv_file, tput_series)
     generate_gnuplot_script_tput_over_time(config, script_file)
+
+    run_gnuplot([csv_file], png_file, script_file)
+
+def generate_rpc_count_plot(config, plots_directory, stats):
+    os.makedirs(plots_directory, exist_ok=True)
+
+    if 'runs' not in stats:
+        return
+
+    if len(stats['runs']) == 0:
+        return
+
+    if 'server' not in stats['runs'][0]:
+        return
+
+    server_stats = stats['runs'][0]['server']
+    if not server_stats:
+        return
+
+    plot_name = "rpc-count-per-server"
+    csv_file = os.path.join(plots_directory, f"{plot_name}.csv")
+    script_file = os.path.join(plots_directory, f"{plot_name}.gpi")
+    png_file = os.path.join(plots_directory, f"{plot_name}.png")
+
+    generate_csv_for_rpc_count(csv_file, server_stats)
+    generate_gnuplot_script_rpc_count(config, script_file)
 
     run_gnuplot([csv_file], png_file, script_file)
 
@@ -768,7 +912,7 @@ def generate_cdf_plots(config, local_out_directory, stats, executor):
 
     for i in range(len(stats['runs'])):
         for op_type in stats['runs'][i]:
-            if not op_type in config['client_cdf_plot_blacklist'] and not 'region-' in op_type:
+            if not op_type in config['client_cdf_plot_blacklist'] and not 'region-' in op_type and not op_type == 'server':
                 if type(stats['runs'][i][op_type]) is dict:
                     cdf_plot_name = 'run-%d-%s' % (i, op_type)
                     futures.append(executor.submit(generate_cdf_plot, config, plots_directory, cdf_plot_name,

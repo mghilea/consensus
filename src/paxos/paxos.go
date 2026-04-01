@@ -57,8 +57,6 @@ type Replica struct {
 	snapshotEnabled     bool
 	snapshotFile        string
 	maxInstanceSpaceSize int
-	inboundRPCs  uint64
-    outboundRPCs uint64
 }
 
 type InstanceStatus int
@@ -111,9 +109,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		0,
 		snapshotEnabled,
 		snapshotFile,
-		maxInstanceSpaceSize,
-		0,
-		0}
+		maxInstanceSpaceSize}
 
 
 	log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
@@ -315,12 +311,12 @@ func (r *Replica) BeTheLeader(args *genericsmrproto.BeTheLeaderArgs, reply *gene
 }
 
 func (r *Replica) replyPrepare(replicaId int32, reply *paxosproto.PrepareReply) {
-	r.outboundRPCs++
+	r.OutboundRPCs++
 	r.SendMsg(replicaId, r.prepareReplyRPC, reply)
 }
 
 func (r *Replica) replyAccept(replicaId int32, reply *paxosproto.AcceptReply) {
-	r.outboundRPCs++
+	r.OutboundRPCs++
 	r.SendMsg(replicaId, r.acceptReplyRPC, reply)
 }
 
@@ -336,10 +332,6 @@ func (r *Replica) batchClock(proposeDone *(chan bool)) {
 
 
 func (r *Replica) run(masterAddr string, masterPort int) {
-	defer func() {
-        log.Printf("RPC Stats: inbound=%d outbound=%d\n", r.inboundRPCs, r.outboundRPCs)
-    }()
-
 	r.ConnectToPeers()
 	if r.Id == 0 {
 		r.IsLeader = true
@@ -377,7 +369,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			proposeChan = r.ProposeChan
 			break
 		case proposal := <-proposeChan:
-			r.inboundRPCs++
+			r.InboundRPCs++
 			//got a Propose from a client
 			dlog.Printf("Received client proposal for clientId %d and commandId %d at time %f\n", proposal.ClientId, proposal.CommandId, time.Now().UnixNano())
 			r.handlePropose(proposal)
@@ -386,7 +378,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			}
 			break
 		case prepareS := <-r.prepareChan:
-			r.inboundRPCs++
+			r.InboundRPCs++
 			prepare := prepareS.(*paxosproto.Prepare)
 			//got a Prepare message
 			dlog.Printf("Received Prepare from replica %d, for instance %d\n", prepare.LeaderId, prepare.Instance)
@@ -394,7 +386,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			break
 
 		case acceptS := <-r.acceptChan:
-			r.inboundRPCs++
+			r.InboundRPCs++
 			accept := acceptS.(*paxosproto.Accept)
 			//got an Accept message
 			dlog.Printf("Received Accept from replica %d, for instance %d\n", accept.LeaderId, accept.Instance)
@@ -402,7 +394,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			break
 
 		case commitS := <-r.commitChan:
-			r.inboundRPCs++
+			r.InboundRPCs++
 			commit := commitS.(*paxosproto.Commit)
 			//got a Commit message
 			dlog.Printf("Received Commit from replica %d, for instance %d\n", commit.LeaderId, commit.Instance)
@@ -410,7 +402,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			break
 
 		case commitS := <-r.commitShortChan:
-			r.inboundRPCs++
+			r.InboundRPCs++
 			commit := commitS.(*paxosproto.CommitShort)
 			//got a Commit message
 			dlog.Printf("Received Commit from replica %d, for instance %d\n", commit.LeaderId, commit.Instance)
@@ -418,7 +410,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			break
 
 		case prepareReplyS := <-r.prepareReplyChan:
-			r.inboundRPCs++
+			r.InboundRPCs++
 			prepareReply := prepareReplyS.(*paxosproto.PrepareReply)
 			//got a Prepare reply
 			dlog.Printf("Received PrepareReply for instance %d\n", prepareReply.Instance)
@@ -426,7 +418,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			break
 
 		case acceptReplyS := <-r.acceptReplyChan:
-			r.inboundRPCs++
+			r.InboundRPCs++
 			acceptReply := acceptReplyS.(*paxosproto.AcceptReply)
 			//got an Accept reply
 			dlog.Printf("Received AcceptReply for instance %d\n", acceptReply.Instance)
@@ -517,7 +509,7 @@ func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 			continue
 		}
 		sent++
-		r.outboundRPCs++
+		r.OutboundRPCs++
 		r.SendMsg(q, r.prepareRPC, args)
 	}
 }
@@ -547,7 +539,7 @@ func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Comm
 		if !r.Alive[r.PreferredPeerOrder[q]] {
 			continue
 		}
-		r.outboundRPCs++
+		r.OutboundRPCs++
 		r.SendMsg(r.PreferredPeerOrder[q], r.acceptRPC, args)
 		sent++
 		if sent >= n {
@@ -594,7 +586,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 			continue
 		}
 		sent++
-		r.outboundRPCs++
+		r.OutboundRPCs++
 		r.SendMsg(q, r.commitShortRPC, argsShort)
 	}
 	if r.Thrifty && q != r.Id {
@@ -607,7 +599,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 				continue
 			}
 			sent++
-			r.outboundRPCs++
+			r.OutboundRPCs++
 			r.SendMsg(q, r.commitRPC, args)
 		}
 	}

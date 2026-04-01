@@ -498,6 +498,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case propose := <-onOffProposeChan:
 			//got a Propose from a client
 			dlog.Printf("Proposal with op %d\n", propose.Command.Op)
+			r.InboundRPCs++
 			r.handlePropose(propose)
 			//deactivate new proposals channel to prioritize the handling of other protocol messages,
 			//and to allow commands to accumulate for batching
@@ -514,6 +515,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case prepareS := <-r.prepareChan:
 			prepare := prepareS.(*epaxosproto.Prepare)
 			//got a Prepare message
+			r.InboundRPCs++
 			dlog.Printf("Received Prepare for instance %d.%d\n", prepare.Replica, prepare.Instance)
 			r.handlePrepare(prepare)
 			break
@@ -521,6 +523,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case preAcceptS := <-r.preAcceptChan:
 			preAccept := preAcceptS.(*epaxosproto.PreAccept)
 			//got a PreAccept message
+			r.InboundRPCs++
 			dlog.Printf("Received PreAccept for instance %d.%d\n", preAccept.LeaderId, preAccept.Instance)
 			r.handlePreAccept(preAccept)
 			break
@@ -528,6 +531,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case acceptS := <-r.acceptChan:
 			accept := acceptS.(*epaxosproto.Accept)
 			//got an Accept message
+			r.InboundRPCs++
 			dlog.Printf("Received Accept for instance %d.%d\n", accept.LeaderId, accept.Instance)
 			r.handleAccept(accept)
 			break
@@ -535,6 +539,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case commitS := <-r.commitChan:
 			commit := commitS.(*epaxosproto.Commit)
 			//got a Commit message
+			r.InboundRPCs++
 			dlog.Printf("Received Commit for instance %d.%d\n", commit.LeaderId, commit.Instance)
 			r.handleCommit(commit)
 			break
@@ -542,6 +547,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case commitS := <-r.commitShortChan:
 			commit := commitS.(*epaxosproto.CommitShort)
 			//got a Commit message
+			r.InboundRPCs++
 			dlog.Printf("Received Commit for instance %d.%d\n", commit.LeaderId, commit.Instance)
 			r.handleCommitShort(commit)
 			break
@@ -549,6 +555,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case prepareReplyS := <-r.prepareReplyChan:
 			prepareReply := prepareReplyS.(*epaxosproto.PrepareReply)
 			//got a Prepare reply
+			r.InboundRPCs++
 			dlog.Printf("Received PrepareReply for instance %d.%d\n", prepareReply.Replica, prepareReply.Instance)
 			r.handlePrepareReply(prepareReply)
 			break
@@ -556,6 +563,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case preAcceptReplyS := <-r.preAcceptReplyChan:
 			preAcceptReply := preAcceptReplyS.(*epaxosproto.PreAcceptReply)
 			//got a PreAccept reply
+			r.InboundRPCs++
 			dlog.Printf("Received PreAcceptReply for instance %d.%d\n", preAcceptReply.Replica, preAcceptReply.Instance)
 			r.handlePreAcceptReply(preAcceptReply)
 			break
@@ -563,6 +571,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case preAcceptOKS := <-r.preAcceptOKChan:
 			preAcceptOK := preAcceptOKS.(*epaxosproto.PreAcceptOK)
 			//got a PreAccept reply
+			r.InboundRPCs++
 			dlog.Printf("Received PreAcceptOK for instance %d.%d\n", r.Id, preAcceptOK.Instance)
 			r.handlePreAcceptOK(preAcceptOK)
 			break
@@ -570,18 +579,21 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case acceptReplyS := <-r.acceptReplyChan:
 			acceptReply := acceptReplyS.(*epaxosproto.AcceptReply)
 			//got an Accept reply
+			r.InboundRPCs++
 			dlog.Printf("Received AcceptReply for instance %d.%d\n", acceptReply.Replica, acceptReply.Instance)
 			r.handleAcceptReply(acceptReply)
 			break
 
 		case tryPreAcceptS := <-r.tryPreAcceptChan:
 			tryPreAccept := tryPreAcceptS.(*epaxosproto.TryPreAccept)
+			r.InboundRPCs++
 			dlog.Printf("Received TryPreAccept for instance %d.%d\n", tryPreAccept.Replica, tryPreAccept.Instance)
 			r.handleTryPreAccept(tryPreAccept)
 			break
 
 		case tryPreAcceptReplyS := <-r.tryPreAcceptReplyChan:
 			tryPreAcceptReply := tryPreAcceptReplyS.(*epaxosproto.TryPreAcceptReply)
+			r.InboundRPCs++
 			dlog.Printf("Received TryPreAcceptReply for instance %d.%d\n", tryPreAcceptReply.Replica, tryPreAcceptReply.Instance)
 			r.handleTryPreAcceptReply(tryPreAcceptReply)
 			break
@@ -717,18 +729,22 @@ func replicaIdFromBallot(ballot int32) int32 {
 ***********************************************************************/
 
 func (r *Replica) replyPrepare(replicaId int32, reply *epaxosproto.PrepareReply) {
+	r.OutboundRPCs++
 	r.SendMsg(replicaId, r.prepareReplyRPC, reply)
 }
 
 func (r *Replica) replyPreAccept(replicaId int32, reply *epaxosproto.PreAcceptReply) {
+	r.OutboundRPCs++
 	r.SendMsg(replicaId, r.preAcceptReplyRPC, reply)
 }
 
 func (r *Replica) replyAccept(replicaId int32, reply *epaxosproto.AcceptReply) {
+	r.OutboundRPCs++
 	r.SendMsg(replicaId, r.acceptReplyRPC, reply)
 }
 
 func (r *Replica) replyTryPreAccept(replicaId int32, reply *epaxosproto.TryPreAcceptReply) {
+	r.OutboundRPCs++
 	r.SendMsg(replicaId, r.tryPreAcceptReplyRPC, reply)
 }
 
@@ -754,6 +770,7 @@ func (r *Replica) bcastPrepare(replica int32, instance int32, ballot int32) {
 		if !r.Alive[q] {
 			continue
 		}
+		r.OutboundRPCs++
 		r.SendMsg(q, r.prepareRPC, args)
 		sent++
 	}
@@ -787,6 +804,7 @@ func (r *Replica) bcastPreAccept(replica int32, instance int32, ballot int32, cm
 			continue
 		}
 		dlog.Printf("[%d.%d] Sending PreAccept to %d (%s).\n", replica, instance, r.PreferredPeerOrder[q], r.PeerAddrList[r.PreferredPeerOrder[q]])
+		r.OutboundRPCs++
 		r.SendMsg(r.PreferredPeerOrder[q], r.preAcceptRPC, args)
 		sent++
 		if sent >= n {
@@ -819,6 +837,7 @@ func (r *Replica) bcastTryPreAccept(replica int32, instance int32, ballot int32,
 		if !r.Alive[q] {
 			continue
 		}
+		r.OutboundRPCs++
 		r.SendMsg(q, r.tryPreAcceptRPC, args)
 	}
 }
@@ -851,6 +870,7 @@ func (r *Replica) bcastAccept(replica int32, instance int32, ballot int32, count
 		if !r.Alive[r.PreferredPeerOrder[q]] {
 			continue
 		}
+		r.OutboundRPCs++
 		r.SendMsg(r.PreferredPeerOrder[q], r.acceptRPC, args)
 		sent++
 		if sent >= n {
@@ -890,9 +910,11 @@ func (r *Replica) bcastCommit(replica int32, instance int32, cmds []state.Comman
 		}
 		if r.Exec || r.Thrifty && sent >= r.N/2 {
 			dlog.Printf("[%d.%d] Sending Commit to %d (%s).\n", replica, instance, r.PreferredPeerOrder[q], r.PeerAddrList[r.PreferredPeerOrder[q]])
+			r.OutboundRPCs++
 			r.SendMsg(r.PreferredPeerOrder[q], r.commitRPC, args)
 		} else {
 			dlog.Printf("[%d.%d] Sending CommitShort to %d (%s).\n", replica, instance, r.PreferredPeerOrder[q], r.PeerAddrList[r.PreferredPeerOrder[q]])
+			r.OutboundRPCs++
 			r.SendMsg(r.PreferredPeerOrder[q], r.commitShortRPC, argsShort)
 			sent++
 		}
@@ -1301,6 +1323,7 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 				r.CommittedUpTo})
 	} else {
 		pok := &epaxosproto.PreAcceptOK{preAccept.Instance}
+		r.OutboundRPCs++
 		r.SendMsg(preAccept.LeaderId, r.preAcceptOKRPC, pok)
 	}
 

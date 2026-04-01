@@ -112,6 +112,8 @@ type Replica struct {
 	DoneAdaptingChan chan bool
 	delayRPC         []map[uint8]bool
 	delayedRPC       []map[uint8]chan fastrpc.Serializable
+	InboundRPCs      int
+	OutboundRPCs     int
 }
 
 func NewReplica(shardIdx int, id int, peerAddrList []string, numShards int, thrifty bool, exec bool, dreply bool, clientConnect bool, statsFile string) *Replica {
@@ -157,6 +159,8 @@ func NewReplica(shardIdx int, id int, peerAddrList []string, numShards int, thri
 		make(chan bool, 1),
 		make([]map[uint8]bool, 0),                      // delayRPC
 		make([]map[uint8]chan fastrpc.Serializable, 0), // delayedRPC
+		0,
+		0,
 	}
 
 	dlog.Printf("hi\n")
@@ -774,6 +778,8 @@ func (r *Replica) UpdatePreferredPeerOrder(quorum []int32) {
 
 func (r *Replica) Finish() {
 	if len(r.statsFile) > 0 {
+		r.Stats.Add("server_inbound_rpcs", r.InboundRPCs)
+		r.Stats.Add("server_outbound_rpcs", r.OutboundRPCs)
 		r.Stats.Export(r.statsFile)
 	}
 }
