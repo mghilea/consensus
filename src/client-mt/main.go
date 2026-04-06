@@ -324,7 +324,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 				time.Sleep(time.Duration(c.r.Intn(*randSleep * 1e6)))
 			}
 
-			if c.opCount < 2 {
+			if c.opCount < 1 {
 				opTypes := make([]state.Operation, *fanout)
 				keys := make([]int64, *fanout)
 
