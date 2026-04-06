@@ -26,7 +26,7 @@ const TRUE = uint8(1)
 const FALSE = uint8(0)
 const DS = 5
 
-const MAX_BATCH = 1000
+const MAX_BATCH = 1
 
 const COMMIT_GRACE_PERIOD = 10 * 1e9 //10 seconds
 
