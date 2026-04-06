@@ -259,7 +259,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 	
 	count := 0
 
-	// time.Sleep(time.Duration(20) * time.Second)
+	time.Sleep(time.Duration(20) * time.Second)
 
 	// Send a request on each of the clients
 	for i := range clients {
@@ -324,27 +324,27 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 				time.Sleep(time.Duration(c.r.Intn(*randSleep * 1e6)))
 			}
 
-			// if c.opCount < 1 {
-			opTypes := make([]state.Operation, *fanout)
-			keys := make([]int64, *fanout)
+			if c.opCount < 1 {
+				opTypes := make([]state.Operation, *fanout)
+				keys := make([]int64, *fanout)
 
-			for j := 0; j < *fanout; j++ {
-				roll := c.r.Intn(1000)
-				if roll < *reads {
-					opTypes[j] = state.GET
-				} else if roll < *reads+*writes {
-					opTypes[j] = state.PUT
-				} else {
-					opTypes[j] = state.CAS
+				for j := 0; j < *fanout; j++ {
+					roll := c.r.Intn(1000)
+					if roll < *reads {
+						opTypes[j] = state.GET
+					} else if roll < *reads+*writes {
+						opTypes[j] = state.PUT
+					} else {
+						opTypes[j] = state.CAS
+					}
+					keys[j] = int64(c.zipf.Uint64())
 				}
-				keys[j] = int64(c.zipf.Uint64())
+				
+				c.startTime = time.Now()
+				dlog.Printf("Client thread %d sending request for clientId %d op %d at %v\n", threadId, c.id, c.opCount, c.startTime.UnixNano())
+				success, _ := c.client.AppRequest(opTypes, keys)
+				_ = success
 			}
-			
-			c.startTime = time.Now()
-			dlog.Printf("Client thread %d sending request for clientId %d op %d at %v\n", threadId, c.id, c.opCount, c.startTime.UnixNano())
-			success, _ := c.client.AppRequest(opTypes, keys)
-			_ = success
-			// }
 		}
 	}
 }
