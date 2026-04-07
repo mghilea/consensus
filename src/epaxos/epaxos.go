@@ -1171,7 +1171,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 			time.Time{}, time.Time{}, make([]time.Time, len(r.PeerAddrList))},
 		0, 0, nil, instance})
 
-	r.updateConflicts(cmds, r.Id, instance, seq)
+	// r.updateConflicts(cmds, r.Id, instance, seq)
 	dlog.Printf("[%d.%d] Updated conflicts at time %f.\n", r.Id, instance, time.Now().UnixNano())
 
 	if seq >= r.maxSeq {
