@@ -259,8 +259,6 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 	
 	count := 0
 
-	time.Sleep(time.Duration(20) * time.Second)
-
 	// Send a request on each of the clients
 	for i := range clients {
 		c := &clients[i]
@@ -319,12 +317,14 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 				results <- Result{"write", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), int32(c.opCount), time.Now().UnixNano()}
 			}
 
+			time.Sleep(time.Duration(10) * time.Second)
+
 			// Send the next request on the same client
 			if *randSleep > 0 {
 				time.Sleep(time.Duration(c.r.Intn(*randSleep * 1e6)))
 			}
 
-			if c.opCount < 1 {
+			if c.opCount < 2 {
 				opTypes := make([]state.Operation, *fanout)
 				keys := make([]int64, *fanout)
 
