@@ -497,7 +497,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 		case propose := <-onOffProposeChan:
 			//got a Propose from a client
-			dlog.Printf("Proposal with op %d\n", propose.Command.Op)
+			dlog.Printf("Proposal with op %d\n at time %f", propose.Command.Op, time.Now().UnixNano())
 			r.InboundRPCs++
 			r.handlePropose(propose)
 			//deactivate new proposals channel to prioritize the handling of other protocol messages,
@@ -516,7 +516,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			prepare := prepareS.(*epaxosproto.Prepare)
 			//got a Prepare message
 			r.InboundRPCs++
-			dlog.Printf("Received Prepare for instance %d.%d\n", prepare.Replica, prepare.Instance)
+			dlog.Printf("Received Prepare for instance %d.%d at time %f\n", prepare.Replica, prepare.Instance, time.Now().UnixNano())
 			r.handlePrepare(prepare)
 			break
 
@@ -524,7 +524,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			preAccept := preAcceptS.(*epaxosproto.PreAccept)
 			//got a PreAccept message
 			r.InboundRPCs++
-			dlog.Printf("Received PreAccept for instance %d.%d\n", preAccept.LeaderId, preAccept.Instance)
+			dlog.Printf("Received PreAccept for instance %d.%d at time %f\n", preAccept.LeaderId, preAccept.Instance, time.Now().UnixNano())
 			r.handlePreAccept(preAccept)
 			break
 
@@ -532,7 +532,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			accept := acceptS.(*epaxosproto.Accept)
 			//got an Accept message
 			r.InboundRPCs++
-			dlog.Printf("Received Accept for instance %d.%d\n", accept.LeaderId, accept.Instance)
+			dlog.Printf("Received Accept for instance %d.%d at time %f\n", accept.LeaderId, accept.Instance, time.Now().UnixNano())
 			r.handleAccept(accept)
 			break
 
@@ -540,7 +540,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			commit := commitS.(*epaxosproto.Commit)
 			//got a Commit message
 			r.InboundRPCs++
-			dlog.Printf("Received Commit for instance %d.%d\n", commit.LeaderId, commit.Instance)
+			dlog.Printf("Received Commit for instance %d.%dv at time %f\n", commit.LeaderId, commit.Instance, time.Now().UnixNano())
 			r.handleCommit(commit)
 			break
 
@@ -548,7 +548,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			commit := commitS.(*epaxosproto.CommitShort)
 			//got a Commit message
 			r.InboundRPCs++
-			dlog.Printf("Received Commit for instance %d.%d\n", commit.LeaderId, commit.Instance)
+			dlog.Printf("Received Commit for instance %d.%d at time %f\n", commit.LeaderId, commit.Instance, time.Now().UnixNano())
 			r.handleCommitShort(commit)
 			break
 
@@ -556,7 +556,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			prepareReply := prepareReplyS.(*epaxosproto.PrepareReply)
 			//got a Prepare reply
 			r.InboundRPCs++
-			dlog.Printf("Received PrepareReply for instance %d.%d\n", prepareReply.Replica, prepareReply.Instance)
+			dlog.Printf("Received PrepareReply for instance %d.%d at time %f\n", prepareReply.Replica, prepareReply.Instance, time.Now().UnixNano())
 			r.handlePrepareReply(prepareReply)
 			break
 
@@ -564,7 +564,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			preAcceptReply := preAcceptReplyS.(*epaxosproto.PreAcceptReply)
 			//got a PreAccept reply
 			r.InboundRPCs++
-			dlog.Printf("Received PreAcceptReply for instance %d.%d\n", preAcceptReply.Replica, preAcceptReply.Instance)
+			dlog.Printf("Received PreAcceptReply for instance %d.%d at time %f\n", preAcceptReply.Replica, preAcceptReply.Instance, time.Now().UnixNano())
 			r.handlePreAcceptReply(preAcceptReply)
 			break
 
@@ -572,7 +572,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			preAcceptOK := preAcceptOKS.(*epaxosproto.PreAcceptOK)
 			//got a PreAccept reply
 			r.InboundRPCs++
-			dlog.Printf("Received PreAcceptOK for instance %d.%d\n", r.Id, preAcceptOK.Instance)
+			dlog.Printf("Received PreAcceptOK for instance %d.%d at time %f\n", r.Id, preAcceptOK.Instance, time.Now().UnixNano())
 			r.handlePreAcceptOK(preAcceptOK)
 			break
 
@@ -580,21 +580,21 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			acceptReply := acceptReplyS.(*epaxosproto.AcceptReply)
 			//got an Accept reply
 			r.InboundRPCs++
-			dlog.Printf("Received AcceptReply for instance %d.%d\n", acceptReply.Replica, acceptReply.Instance)
+			dlog.Printf("Received AcceptReply for instance %d.%d at time %f\n", acceptReply.Replica, acceptReply.Instance, time.Now().UnixNano())
 			r.handleAcceptReply(acceptReply)
 			break
 
 		case tryPreAcceptS := <-r.tryPreAcceptChan:
 			tryPreAccept := tryPreAcceptS.(*epaxosproto.TryPreAccept)
 			r.InboundRPCs++
-			dlog.Printf("Received TryPreAccept for instance %d.%d\n", tryPreAccept.Replica, tryPreAccept.Instance)
+			dlog.Printf("Received TryPreAccept for instance %d.%d at time %f\n", tryPreAccept.Replica, tryPreAccept.Instance, time.Now().UnixNano())
 			r.handleTryPreAccept(tryPreAccept)
 			break
 
 		case tryPreAcceptReplyS := <-r.tryPreAcceptReplyChan:
 			tryPreAcceptReply := tryPreAcceptReplyS.(*epaxosproto.TryPreAcceptReply)
 			r.InboundRPCs++
-			dlog.Printf("Received TryPreAcceptReply for instance %d.%d\n", tryPreAcceptReply.Replica, tryPreAcceptReply.Instance)
+			dlog.Printf("Received TryPreAcceptReply for instance %d.%d at time %f\n", tryPreAcceptReply.Replica, tryPreAcceptReply.Instance, time.Now().UnixNano())
 			r.handleTryPreAcceptReply(tryPreAcceptReply)
 			break
 

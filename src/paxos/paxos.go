@@ -413,7 +413,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			r.InboundRPCs++
 			prepareReply := prepareReplyS.(*paxosproto.PrepareReply)
 			//got a Prepare reply
-			dlog.Printf("Received PrepareReply for instance %d\n", prepareReply.Instance)
+			dlog.Printf("Received PrepareReply for instance %d at time %f\n", prepareReply.Instance, time.Now().UnixNano())
 			r.handlePrepareReply(prepareReply)
 			break
 
@@ -421,7 +421,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			r.InboundRPCs++
 			acceptReply := acceptReplyS.(*paxosproto.AcceptReply)
 			//got an Accept reply
-			dlog.Printf("Received AcceptReply for instance %d\n", acceptReply.Instance)
+			dlog.Printf("Received AcceptReply for instance %d at time %f\n", acceptReply.Instance, time.Now().UnixNano())
 			r.handleAcceptReply(acceptReply)
 			break
 
