@@ -497,7 +497,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 		case propose := <-onOffProposeChan:
 			//got a Propose from a client
-			dlog.Printf("Proposal with op %d\n at time %f", propose.Command.Op, time.Now().UnixNano())
+			dlog.Printf("Proposal with op %d at time %f\n", propose.Command.Op, time.Now().UnixNano())
 			r.InboundRPCs++
 			r.handlePropose(propose)
 			//deactivate new proposals channel to prioritize the handling of other protocol messages,
@@ -803,7 +803,7 @@ func (r *Replica) bcastPreAccept(replica int32, instance int32, ballot int32, cm
 		if !r.Alive[r.PreferredPeerOrder[q]] {
 			continue
 		}
-		dlog.Printf("[%d.%d] Sending PreAccept to %d (%s).\n", replica, instance, r.PreferredPeerOrder[q], r.PeerAddrList[r.PreferredPeerOrder[q]])
+		dlog.Printf("[%d.%d] Sending PreAccept to %d (%s) at time %f.\n", replica, instance, r.PreferredPeerOrder[q], r.PeerAddrList[r.PreferredPeerOrder[q]], time.Now().UnixNano())
 		r.OutboundRPCs++
 		r.SendMsg(r.PreferredPeerOrder[q], r.preAcceptRPC, args)
 		sent++
@@ -1465,7 +1465,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 }
 
 func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
-	dlog.Printf("[%d.%d] Handling PreAcceptOK\n", r.Id, pareply.Instance)
+	dlog.Printf("[%d.%d] Handling PreAcceptOK at time %f\n", r.Id, pareply.Instance, time.Now().UnixNano())
 	inst := r.getInstance(r.Id, pareply.Instance)
 
 	// we can't ignore the PreAccept reply if we've sent out Accept messages but are
@@ -1525,7 +1525,7 @@ func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
 					}
 				}
 				if !r.NeedsWaitForExecute(&inst.Cmds[i]) {
-					dlog.Printf("[%d.%d.%d] Replying to client before execute.\n", r.Id, pareply.Instance, i, inst.Cmds[i].Op)
+					dlog.Printf("[%d.%d.%d] Replying to client before execute at time %f.\n", r.Id, pareply.Instance, i, inst.Cmds[i].Op, time.Now().UnixNano())
 					r.ReplyProposeTS(
 						&genericsmrproto.ProposeReplyTS{
 							TRUE,
