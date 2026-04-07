@@ -1150,6 +1150,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
 func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, proposals []*genericsmr.Propose, cmds []state.Command, batchSize int) {
 	//init command attributes
+	dlog.Printf("[%d.%d] Starting phase1 at time %f.\n", r.Id, instNo, time.Now().UnixNano())
 
 	seq := int32(0)
 	var deps [DS]int32
@@ -1158,6 +1159,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 	}
 
 	seq, deps, _ = r.updateAttributes(cmds, seq, deps, replica, instance)
+	dlog.Printf("[%d.%d] Updated attributes at time %f.\n", r.Id, instNo, time.Now().UnixNano())
 
 	r.setInstance(r.Id, instance, &Instance{
 		cmds,
@@ -1170,6 +1172,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 		0, 0, nil, instance})
 
 	r.updateConflicts(cmds, r.Id, instance, seq)
+	dlog.Printf("[%d.%d] Updated conflicts at time %f.\n", r.Id, instNo, time.Now().UnixNano())
 
 	if seq >= r.maxSeq {
 		r.maxSeq = seq + 1
@@ -1178,6 +1181,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 	r.recordInstanceMetadata(r.getInstance(r.Id, instance))
 	r.recordCommands(cmds)
 	r.sync()
+	dlog.Printf("[%d.%d] Recorded metadata and synced at time %f.\n", r.Id, instNo, time.Now().UnixNano())
 
 	r.bcastPreAccept(r.Id, instance, ballot, cmds, seq, deps)
 
