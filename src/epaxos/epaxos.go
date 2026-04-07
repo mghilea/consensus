@@ -909,7 +909,7 @@ func (r *Replica) bcastCommit(replica int32, instance int32, cmds []state.Comman
 			continue
 		}
 		if r.Exec || r.Thrifty && sent >= r.N/2 {
-			dlog.Printf("[%d.%d] Sending Commit to %d (%s).\n", replica, instance, r.PreferredPeerOrder[q], r.PeerAddrList[r.PreferredPeerOrder[q]])
+			dlog.Printf("[%d.%d] Sending Commit to %d (%s) at time %f.\n", replica, instance, r.PreferredPeerOrder[q], r.PeerAddrList[r.PreferredPeerOrder[q]], time.Now().UnixNano())
 			r.OutboundRPCs++
 			r.SendMsg(r.PreferredPeerOrder[q], r.commitRPC, args)
 		} else {
@@ -937,7 +937,7 @@ func (r *Replica) updateCommitted(replica int32) {
 		(r.getInstance(replica, r.CommittedUpTo[replica]+1).Status == epaxosproto.COMMITTED ||
 			r.getInstance(replica, r.CommittedUpTo[replica]+1).Status == epaxosproto.EXECUTED) {
 		r.CommittedUpTo[replica] = r.CommittedUpTo[replica] + 1
-		dlog.Printf("Committed up to %d.%d.\n", replica, r.CommittedUpTo[replica])
+		dlog.Printf("Committed up to %d.%d at time %f.\n", replica, r.CommittedUpTo[replica], time.Now().UnixNano())
 	}
 }
 
@@ -1547,7 +1547,7 @@ func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
 			r.Stats.Increment("fast_reads_0")
 		}
 
-		dlog.Printf("[%d.%d] Committing on fast path.\n", r.Id, pareply.Instance)
+		dlog.Printf("[%d.%d] Committing on fast path at time %f.\n", r.Id, pareply.Instance, time.Now().UnixNano())
 		dlog.Printf("[%d.%d] Need wait for deps=%v before execute.\n", r.Id, pareply.Instance, inst.Deps)
 		r.bcastCommit(r.Id, pareply.Instance, inst.Cmds, inst.Seq, inst.Deps)
 	} else if inst.lb.preAcceptOKs >= r.N/2 {
