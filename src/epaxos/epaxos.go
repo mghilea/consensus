@@ -1241,7 +1241,7 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 		//reordered handling of commit/accept and pre-accept
 		if inst.Cmds == nil {
 			r.getInstance(preAccept.LeaderId, preAccept.Instance).Cmds = preAccept.Command
-			r.updateConflicts(preAccept.Command, preAccept.Replica, preAccept.Instance, preAccept.Seq)
+			// r.updateConflicts(preAccept.Command, preAccept.Replica, preAccept.Instance, preAccept.Seq)
 			//r.InstanceSpace[preAccept.LeaderId][preAccept.Instance].bfilter = bfFromCommands(preAccept.Command)
 		}
 		r.recordCommands(preAccept.Command)
