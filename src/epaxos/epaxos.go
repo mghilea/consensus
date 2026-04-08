@@ -1299,7 +1299,7 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 			preAccept.Instance})
 	}
 
-	r.updateConflicts(preAccept.Command, preAccept.Replica, preAccept.Instance, preAccept.Seq)
+	// r.updateConflicts(preAccept.Command, preAccept.Replica, preAccept.Instance, preAccept.Seq)
 
 	r.recordInstanceMetadata(r.getInstance(preAccept.Replica, preAccept.Instance))
 	r.recordCommands(preAccept.Command)
@@ -1743,7 +1743,7 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 			nil,
 			commit.Instance})
 
-		r.updateConflicts(commit.Command, commit.Replica, commit.Instance, commit.Seq)
+		// r.updateConflicts(commit.Command, commit.Replica, commit.Instance, commit.Seq)
 
 		if len(commit.Command) == 0 {
 			//checkpoint
