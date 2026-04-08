@@ -975,39 +975,39 @@ func (r *Replica) updateConflicts(cmds []state.Command, replica int32, instance 
 
 func (r *Replica) updateAttributes(cmds []state.Command, seq int32, deps [DS]int32, replica int32, instance int32) (int32, [DS]int32, bool) {
 	changed := false
-	if !r.noConflicts {
-		for q := 0; q < r.N; q++ {
-			if r.Id != replica && int32(q) == replica {
-				continue
-			}
-			for i := 0; i < len(cmds); i++ {
-				keyMap, ok := r.conflicts1[q][cmds[i].K]
-				if ok {
-					highestInterf, ok := keyMap[cmds[i].Op]
-					if ok && highestInterf > deps[q] {
-						deps[q] = highestInterf
-						inst := r.getInstance(int32(q), highestInterf)
-						if inst != nil && seq <= inst.Seq {
-							seq = inst.Seq + 1
-						}
-						changed = true
-					}
-				}
-			}
-		}
+	// if !r.noConflicts {
+	// 	for q := 0; q < r.N; q++ {
+	// 		if r.Id != replica && int32(q) == replica {
+	// 			continue
+	// 		}
+	// 		for i := 0; i < len(cmds); i++ {
+	// 			keyMap, ok := r.conflicts1[q][cmds[i].K]
+	// 			if ok {
+	// 				highestInterf, ok := keyMap[cmds[i].Op]
+	// 				if ok && highestInterf > deps[q] {
+	// 					deps[q] = highestInterf
+	// 					inst := r.getInstance(int32(q), highestInterf)
+	// 					if inst != nil && seq <= inst.Seq {
+	// 						seq = inst.Seq + 1
+	// 					}
+	// 					changed = true
+	// 				}
+	// 			}
+	// 		}
+	// 	}
 
-		for i := 0; i < len(cmds); i++ {
-			keyMap, ok := r.maxSeqPerKey1[cmds[i].K]
-			if ok {
-				maxSeq, ok := keyMap[cmds[i].Op]
-				if ok && seq <= maxSeq {
-					seq = maxSeq + 1
-					changed = true
-				}
-			}
-		}
-	}
-	r.Stats.Max("conflicts_map_size", len(r.conflicts1[replica]))
+	// 	for i := 0; i < len(cmds); i++ {
+	// 		keyMap, ok := r.maxSeqPerKey1[cmds[i].K]
+	// 		if ok {
+	// 			maxSeq, ok := keyMap[cmds[i].Op]
+	// 			if ok && seq <= maxSeq {
+	// 				seq = maxSeq + 1
+	// 				changed = true
+	// 			}
+	// 		}
+	// 	}
+	// }
+	// r.Stats.Max("conflicts_map_size", len(r.conflicts1[replica]))
 	return seq, deps, changed
 }
 
