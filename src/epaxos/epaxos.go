@@ -1331,7 +1331,7 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 		r.SendMsg(preAccept.LeaderId, r.preAcceptOKRPC, pok)
 	}
 
-	dlog.Printf("I've replied to the PreAccept\n")
+	dlog.Printf("I've replied to the PreAccept at time %f\n", time.Now().UnixNano())
 }
 
 func (r *Replica) fastPathQuorum() int {
