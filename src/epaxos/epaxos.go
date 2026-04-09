@@ -497,7 +497,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 		case propose := <-onOffProposeChan:
 			//got a Propose from a client
-			dlog.Printf("Proposal with op %d at time %f\n", propose.Command.Op, time.Now().UnixNano())
+			dlog.Printf("Proposal with op %d for key %d at time %f\n", propose.Command.Op, propose.Command.K, time.Now().UnixNano())
 			r.InboundRPCs++
 			r.handlePropose(propose)
 			//deactivate new proposals channel to prioritize the handling of other protocol messages,
