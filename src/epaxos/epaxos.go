@@ -35,7 +35,7 @@ const BF_M_N = 32.0
 
 var bf_PT uint32
 
-const DO_CHECKPOINTING = true
+const DO_CHECKPOINTING = false
 const HT_INIT_SIZE = 200000
 const CHECKPOINT_PERIOD = 10000
 
