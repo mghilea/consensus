@@ -653,44 +653,44 @@ func (r *Replica) setupShards(masterAddr string, masterPort int) {
 
 func (r *Replica) executeCommands() {
 	const SLEEP_TIME_NS = 1e6
-	problemInstance := make([]int32, r.N)
-	timeout := make([]uint64, r.N)
-	for q := 0; q < r.N; q++ {
-		problemInstance[q] = -1
-		timeout[q] = 0
-	}
+	// problemInstance := make([]int32, r.N)
+	// timeout := make([]uint64, r.N)
+	// for q := 0; q < r.N; q++ {
+	// 	problemInstance[q] = -1
+	// 	timeout[q] = 0
+	// }
 
 	for !r.Shutdown {
 		executed := false
 		for q := 0; q < r.N; q++ {
 			inst := int32(0)
 			for inst = r.ExecedUpTo[q] + 1; inst < r.crtInstance[q]; inst++ {
-				if r.getInstance(int32(q), inst) != nil && r.getInstance(int32(q), inst).Status == epaxosproto.EXECUTED {
-					dlog.Printf("[%d.%d] Already execed via dependent instance.\n", q, inst)
-					if inst == r.ExecedUpTo[q]+1 {
-						r.ExecedUpTo[q] = inst
-					}
-					continue
-				}
-				if r.getInstance(int32(q), inst) == nil || r.getInstance(int32(q), inst).Status != epaxosproto.COMMITTED {
-					if inst == problemInstance[q] {
-						timeout[q] += SLEEP_TIME_NS
-						if timeout[q] >= COMMIT_GRACE_PERIOD {
-							r.instancesToRecover <- &instanceId{int32(q), inst}
-							timeout[q] = 0
-						}
-					} else {
-						problemInstance[q] = inst
-						timeout[q] = 0
-					}
-					if r.getInstance(int32(q), inst) == nil {
-						continue
-					}
-					break
-				}
-				if r.getInstance(int32(q), inst).lb != nil {
-					dlog.Printf("[%d.%d] Trying to execute at time %d.\n", q, inst, time.Now().Sub(r.getInstance(int32(q), inst).lb.committedTime))
-				}
+				// if r.getInstance(int32(q), inst) != nil && r.getInstance(int32(q), inst).Status == epaxosproto.EXECUTED {
+				// 	dlog.Printf("[%d.%d] Already execed via dependent instance.\n", q, inst)
+				// 	if inst == r.ExecedUpTo[q]+1 {
+				// 		r.ExecedUpTo[q] = inst
+				// 	}
+				// 	continue
+				// }
+				// if r.getInstance(int32(q), inst) == nil || r.getInstance(int32(q), inst).Status != epaxosproto.COMMITTED {
+				// 	if inst == problemInstance[q] {
+				// 		timeout[q] += SLEEP_TIME_NS
+				// 		if timeout[q] >= COMMIT_GRACE_PERIOD {
+				// 			r.instancesToRecover <- &instanceId{int32(q), inst}
+				// 			timeout[q] = 0
+				// 		}
+				// 	} else {
+				// 		problemInstance[q] = inst
+				// 		timeout[q] = 0
+				// 	}
+				// 	if r.getInstance(int32(q), inst) == nil {
+				// 		continue
+				// 	}
+				// 	break
+				// }
+				// if r.getInstance(int32(q), inst).lb != nil {
+				// 	dlog.Printf("[%d.%d] Trying to execute at time %d.\n", q, inst, time.Now().Sub(r.getInstance(int32(q), inst).lb.committedTime))
+				// }
 				if ok := r.exec.executeCommand(int32(q), inst); ok {
 					executed = true
 					if inst == r.ExecedUpTo[q]+1 {
@@ -937,7 +937,7 @@ func (r *Replica) updateCommitted(replica int32) {
 		(r.getInstance(replica, r.CommittedUpTo[replica]+1).Status == epaxosproto.COMMITTED ||
 			r.getInstance(replica, r.CommittedUpTo[replica]+1).Status == epaxosproto.EXECUTED) {
 		r.CommittedUpTo[replica] = r.CommittedUpTo[replica] + 1
-		dlog.Printf("Committed up to %d.%d at time %f.\n", replica, r.CommittedUpTo[replica], time.Now().UnixNano())
+		// dlog.Printf("Committed up to %d.%d at time %f.\n", replica, r.CommittedUpTo[replica], time.Now().UnixNano())
 	}
 }
 

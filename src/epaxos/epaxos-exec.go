@@ -36,10 +36,10 @@ func (e *Exec) executeCommand(replica int32, instance int32) bool {
 		return false
 	}
 
-	dlog.Printf("[%d.%d] Finding scc and then executing.\n", replica, instance)
-	if !e.findSCC(inst) {
-		return false
-	}
+	// dlog.Printf("[%d.%d] Finding scc and then executing.\n", replica, instance)
+	// if !e.findSCC(inst) {
+	// 	return false
+	// }
 
 	return true
 }
