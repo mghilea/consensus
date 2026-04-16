@@ -803,7 +803,7 @@ func (r *Replica) bcastPreAccept(replica int32, instance int32, ballot int32, cm
 		if !r.Alive[r.PreferredPeerOrder[q]] {
 			continue
 		}
-		dlog.Printf("[%d.%d] Sending PreAccept to %d (%s) at time %f.\n", replica, instance, r.PreferredPeerOrder[q], r.PeerAddrList[r.PreferredPeerOrder[q]], time.Now().UnixNano())
+		// dlog.Printf("[%d.%d] Sending PreAccept to %d (%s) at time %f.\n", replica, instance, r.PreferredPeerOrder[q], r.PeerAddrList[r.PreferredPeerOrder[q]], time.Now().UnixNano())
 		r.OutboundRPCs++
 		r.SendMsg(r.PreferredPeerOrder[q], r.preAcceptRPC, args)
 		sent++
@@ -883,11 +883,11 @@ var ec epaxosproto.Commit
 var ecs epaxosproto.CommitShort
 
 func (r *Replica) bcastCommit(replica int32, instance int32, cmds []state.Command, seq int32, deps [DS]int32) {
-	defer func() {
-		if err := recover(); err != nil {
-			dlog.Println("Commit bcast failed:", err)
-		}
-	}()
+	// defer func() {
+	// 	if err := recover(); err != nil {
+	// 		dlog.Println("Commit bcast failed:", err)
+	// 	}
+	// }()
 	ec.LeaderId = r.Id
 	ec.Replica = replica
 	ec.Instance = instance
@@ -1130,8 +1130,8 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	// }
 	r.crtInstance[r.Id]++
 
-	dlog.Printf("Starting instance %d\n", instNo)
-	dlog.Printf("Batching %d\n", batchSize)
+	// dlog.Printf("Starting instance %d\n", instNo)
+	// dlog.Printf("Batching %d\n", batchSize)
 
 
 	cmds := make([]state.Command, batchSize)
@@ -1140,7 +1140,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	proposals[0] = propose
 	for i := 1; i < batchSize; i++ {
 		prop := <-r.ProposeChan
-		dlog.Printf("[%d.%d] Starting instance for command %d.\n", r.Id, instNo, prop.CommandId)
+		// dlog.Printf("[%d.%d] Starting instance for command %d.\n", r.Id, instNo, prop.CommandId)
 		cmds[i] = prop.Command
 		proposals[i] = prop
 	}
@@ -1150,7 +1150,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
 func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, proposals []*genericsmr.Propose, cmds []state.Command, batchSize int) {
 	//init command attributes
-	dlog.Printf("[%d.%d] Starting phase1 at time %f.\n", r.Id, instance, time.Now().UnixNano())
+	// dlog.Printf("[%d.%d] Starting phase1 at time %f.\n", r.Id, instance, time.Now().UnixNano())
 
 	seq := int32(0)
 	var deps [DS]int32
@@ -1174,18 +1174,18 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 	// r.updateConflicts(cmds, r.Id, instance, seq)
 	// dlog.Printf("[%d.%d] Updated conflicts at time %f.\n", r.Id, instance, time.Now().UnixNano())
 
-	if seq >= r.maxSeq {
-		r.maxSeq = seq + 1
-	}
+	// if seq >= r.maxSeq {
+	// 	r.maxSeq = seq + 1
+	// }
 
-	r.recordInstanceMetadata(r.getInstance(r.Id, instance))
-	r.recordCommands(cmds)
-	r.sync()
-	dlog.Printf("[%d.%d] Recorded metadata and synced at time %f.\n", r.Id, instance, time.Now().UnixNano())
+	// r.recordInstanceMetadata(r.getInstance(r.Id, instance))
+	// r.recordCommands(cmds)
+	// r.sync()
+	// dlog.Printf("[%d.%d] Recorded metadata and synced at time %f.\n", r.Id, instance, time.Now().UnixNano())
 
 	r.bcastPreAccept(r.Id, instance, ballot, cmds, seq, deps)
 
-	cpcounter += batchSize
+	// cpcounter += batchSize
 
 	// if r.Id == 0 && DO_CHECKPOINTING && cpcounter >= CHECKPOINT_PERIOD {
 	// 	cpcounter = 0
@@ -1231,7 +1231,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 }
 
 func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
-	inst := r.getInstance(preAccept.LeaderId, preAccept.Instance)
+	// inst := r.getInstance(preAccept.LeaderId, preAccept.Instance)
 
 	// if preAccept.Seq >= r.maxSeq {
 	// 	r.maxSeq = preAccept.Seq + 1
@@ -1256,10 +1256,10 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 	//update attributes for command
 	seq := preAccept.Seq
 	deps := preAccept.Deps
-	changed := false
+	// changed := false
 	// seq, deps, changed := r.updateAttributes(preAccept.Command, preAccept.Seq, preAccept.Deps, preAccept.Replica, preAccept.Instance)
 
-	uncommittedDeps := false
+	// uncommittedDeps := false
 	// for q := 0; q < r.N; q++ {
 	// 	if deps[q] > r.CommittedUpTo[q] {
 	// 		uncommittedDeps = true
@@ -1271,36 +1271,36 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 	// 	status = epaxosproto.PREACCEPTED
 	// }
 
-	if inst != nil {
-		if preAccept.Ballot < inst.ballot {
-			r.replyPreAccept(preAccept.LeaderId,
-				&epaxosproto.PreAcceptReply{
-					preAccept.Replica,
-					preAccept.Instance,
-					FALSE,
-					inst.ballot,
-					inst.Seq,
-					inst.Deps,
-					r.CommittedUpTo})
-			return
-		} else {
-			inst.Cmds = preAccept.Command
-			inst.Seq = seq
-			inst.Deps = deps
-			inst.ballot = preAccept.Ballot
-			inst.Status = status
-		}
-	} else {
-		r.setInstance(preAccept.Replica, preAccept.Instance, &Instance{
-			preAccept.Command,
-			preAccept.Ballot,
-			status,
-			seq,
-			deps,
-			nil, 0, 0,
-			nil,
-			preAccept.Instance})
-	}
+	// if inst != nil {
+	// 	if preAccept.Ballot < inst.ballot {
+	// 		r.replyPreAccept(preAccept.LeaderId,
+	// 			&epaxosproto.PreAcceptReply{
+	// 				preAccept.Replica,
+	// 				preAccept.Instance,
+	// 				FALSE,
+	// 				inst.ballot,
+	// 				inst.Seq,
+	// 				inst.Deps,
+	// 				r.CommittedUpTo})
+	// 		return
+	// 	} else {
+	// 		inst.Cmds = preAccept.Command
+	// 		inst.Seq = seq
+	// 		inst.Deps = deps
+	// 		inst.ballot = preAccept.Ballot
+	// 		inst.Status = status
+	// 	}
+	// } else {
+	r.setInstance(preAccept.Replica, preAccept.Instance, &Instance{
+		preAccept.Command,
+		preAccept.Ballot,
+		status,
+		seq,
+		deps,
+		nil, 0, 0,
+		nil,
+		preAccept.Instance})
+	// }
 
 	// r.updateConflicts(preAccept.Command, preAccept.Replica, preAccept.Instance, preAccept.Seq)
 
@@ -1318,21 +1318,21 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 	// 	r.clearHashtables()
 	// }
 
-	if changed || uncommittedDeps || preAccept.Replica != preAccept.LeaderId || !isInitialBallot(preAccept.Ballot) {
-		r.replyPreAccept(preAccept.LeaderId,
-			&epaxosproto.PreAcceptReply{
-				preAccept.Replica,
-				preAccept.Instance,
-				TRUE,
-				preAccept.Ballot,
-				seq,
-				deps,
-				r.CommittedUpTo})
-	} else {
-		pok := &epaxosproto.PreAcceptOK{preAccept.Instance}
-		r.OutboundRPCs++
-		r.SendMsg(preAccept.LeaderId, r.preAcceptOKRPC, pok)
-	}
+	// if changed || uncommittedDeps || preAccept.Replica != preAccept.LeaderId || !isInitialBallot(preAccept.Ballot) {
+	// 	r.replyPreAccept(preAccept.LeaderId,
+	// 		&epaxosproto.PreAcceptReply{
+	// 			preAccept.Replica,
+	// 			preAccept.Instance,
+	// 			TRUE,
+	// 			preAccept.Ballot,
+	// 			seq,
+	// 			deps,
+	// 			r.CommittedUpTo})
+	// } else {
+	pok := &epaxosproto.PreAcceptOK{preAccept.Instance}
+	r.OutboundRPCs++
+	r.SendMsg(preAccept.LeaderId, r.preAcceptOKRPC, pok)
+	// }
 
 	// dlog.Printf("I've replied to the PreAccept at time %f\n", time.Now().UnixNano())
 }
@@ -1472,7 +1472,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 }
 
 func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
-	dlog.Printf("[%d.%d] Handling PreAcceptOK at time %f\n", r.Id, pareply.Instance, time.Now().UnixNano())
+	// dlog.Printf("[%d.%d] Handling PreAcceptOK at time %f\n", r.Id, pareply.Instance, time.Now().UnixNano())
 	inst := r.getInstance(r.Id, pareply.Instance)
 
 	// we can't ignore the PreAccept reply if we've sent out Accept messages but are
@@ -1511,8 +1511,8 @@ func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
 	// 	}
 	// }
 
-	dlog.Printf("[%d.%d] PreAcceptOKs: %d (%d total replicas).\n", r.Id, pareply.Instance,
-		inst.lb.preAcceptOKs, r.N)
+	// dlog.Printf("[%d.%d] PreAcceptOKs: %d (%d total replicas).\n", r.Id, pareply.Instance,
+	// 	inst.lb.preAcceptOKs, r.N)
 	//can we commit on the fast path?
 	// if inst.lb.preAcceptOKs >= r.fastPathQuorum()-1 && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
 	happy++
@@ -1532,7 +1532,7 @@ func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
 			// 	}
 			// }
 			if !r.NeedsWaitForExecute(&inst.Cmds[i]) {
-				dlog.Printf("[%d.%d.%d] Replying to client before execute at time %f.\n", r.Id, pareply.Instance, i, inst.Cmds[i].Op, time.Now().UnixNano())
+			// dlog.Printf("[%d.%d.%d] Replying to client before execute at time %f.\n", r.Id, pareply.Instance, i, inst.Cmds[i].Op, time.Now().UnixNano())
 				r.ReplyProposeTS(
 					&genericsmrproto.ProposeReplyTS{
 						TRUE,
@@ -1707,7 +1707,7 @@ func (r *Replica) handleAcceptReply(areply *epaxosproto.AcceptReply) {
 ***********************************************************************/
 
 func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
-	dlog.Printf("[%d.%d] Received Commit.\n", commit.Replica, commit.Instance)
+	// dlog.Printf("[%d.%d] Received Commit.\n", commit.Replica, commit.Instance)
 	inst := r.getInstance(commit.Replica, commit.Instance)
 
 	if commit.Seq >= r.maxSeq {
@@ -1748,15 +1748,15 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 
 		// r.updateConflicts(commit.Command, commit.Replica, commit.Instance, commit.Seq)
 
-		if len(commit.Command) == 0 {
-			//checkpoint
-			//update latest checkpoint info
-			r.latestCPReplica = commit.Replica
-			r.latestCPInstance = commit.Instance
+		// if len(commit.Command) == 0 {
+		// 	//checkpoint
+		// 	//update latest checkpoint info
+		// 	r.latestCPReplica = commit.Replica
+		// 	r.latestCPInstance = commit.Instance
 
-			//discard dependency hashtables
-			r.clearHashtables()
-		}
+		// 	//discard dependency hashtables
+		// 	r.clearHashtables()
+		// }
 	}
 	r.updateCommitted(commit.Replica)
 
