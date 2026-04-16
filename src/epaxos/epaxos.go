@@ -909,7 +909,7 @@ func (r *Replica) bcastCommit(replica int32, instance int32, cmds []state.Comman
 			continue
 		}
 		if r.Exec || r.Thrifty && sent >= r.N/2 {
-			dlog.Printf("[%d.%d] Sending Commit to %d (%s) at time %f.\n", replica, instance, r.PreferredPeerOrder[q], r.PeerAddrList[r.PreferredPeerOrder[q]], time.Now().UnixNano())
+			// dlog.Printf("[%d.%d] Sending Commit to %d (%s) at time %f.\n", replica, instance, r.PreferredPeerOrder[q], r.PeerAddrList[r.PreferredPeerOrder[q]], time.Now().UnixNano())
 			r.OutboundRPCs++
 			r.SendMsg(r.PreferredPeerOrder[q], r.commitRPC, args)
 		} else {
@@ -1733,7 +1733,7 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 		inst.Deps = commit.Deps
 		inst.Status = epaxosproto.COMMITTED
 	} else {
-		dlog.Printf("[%d.%d] Updated with committed instance.\n", commit.Replica, commit.Instance)
+		// dlog.Printf("[%d.%d] Updated with committed instance.\n", commit.Replica, commit.Instance)
 		r.setInstance(commit.Replica, int32(commit.Instance), &Instance{
 			commit.Command,
 			0,
