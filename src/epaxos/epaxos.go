@@ -502,9 +502,9 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			r.handlePropose(propose)
 			//deactivate new proposals channel to prioritize the handling of other protocol messages,
 			//and to allow commands to accumulate for batching
-			if MAX_BATCH > 100 {
-				onOffProposeChan = nil
-			}
+			// if MAX_BATCH > 100 {
+			// 	onOffProposeChan = nil
+			// }
 			break
 
 		case <-fastClockChan:
@@ -779,11 +779,11 @@ func (r *Replica) bcastPrepare(replica int32, instance int32, ballot int32) {
 var pa epaxosproto.PreAccept
 
 func (r *Replica) bcastPreAccept(replica int32, instance int32, ballot int32, cmds []state.Command, seq int32, deps [DS]int32) {
-	defer func() {
-		if err := recover(); err != nil {
-			dlog.Println("PreAccept bcast failed:", err)
-		}
-	}()
+	// defer func() {
+	// 	if err := recover(); err != nil {
+	// 		dlog.Println("PreAccept bcast failed:", err)
+	// 	}
+	// }()
 	pa.LeaderId = r.Id
 	pa.Replica = replica
 	pa.Instance = instance
@@ -1117,17 +1117,17 @@ func bfFromCommands(cmds []state.Command) *bloomfilter.Bloomfilter {
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	//TODO!! Handle client retries
 
-	batchSize := len(r.ProposeChan) + 1
-	if batchSize > MAX_BATCH {
-		batchSize = MAX_BATCH
-	}
+	batchSize := 1 //len(r.ProposeChan) + 1
+	// if batchSize > MAX_BATCH {
+	// 	batchSize = MAX_BATCH
+	// }
 
 	instNo := r.crtInstance[r.Id]
-	for r.crtInstance[r.Id] >= r.logOffset[r.Id] + PREALLOCATED_INSTANCE_SPACE {
-		// block for compaction to free up space
-		time.Sleep(COMPACTION_SLEEP_INTERVAL)
-		continue
-	}
+	// for r.crtInstance[r.Id] >= r.logOffset[r.Id] + PREALLOCATED_INSTANCE_SPACE {
+	// 	// block for compaction to free up space
+	// 	time.Sleep(COMPACTION_SLEEP_INTERVAL)
+	// 	continue
+	// }
 	r.crtInstance[r.Id]++
 
 	dlog.Printf("Starting instance %d\n", instNo)
@@ -1233,9 +1233,9 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 	inst := r.getInstance(preAccept.LeaderId, preAccept.Instance)
 
-	if preAccept.Seq >= r.maxSeq {
-		r.maxSeq = preAccept.Seq + 1
-	}
+	// if preAccept.Seq >= r.maxSeq {
+	// 	r.maxSeq = preAccept.Seq + 1
+	// }
 
 	// if inst != nil && (inst.Status == epaxosproto.COMMITTED || inst.Status == epaxosproto.ACCEPTED) {
 	// 	//reordered handling of commit/accept and pre-accept
@@ -1249,12 +1249,15 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 	// 	return
 	// }
 
-	if preAccept.Instance >= r.crtInstance[preAccept.Replica] {
-		r.crtInstance[preAccept.Replica] = preAccept.Instance + 1
-	}
+	// if preAccept.Instance >= r.crtInstance[preAccept.Replica] {
+	// 	r.crtInstance[preAccept.Replica] = preAccept.Instance + 1
+	// }
 
 	//update attributes for command
-	seq, deps, changed := r.updateAttributes(preAccept.Command, preAccept.Seq, preAccept.Deps, preAccept.Replica, preAccept.Instance)
+	seq := preAccept.Seq
+	deps := preAccept.Deps
+	changed := false
+	// seq, deps, changed := r.updateAttributes(preAccept.Command, preAccept.Seq, preAccept.Deps, preAccept.Replica, preAccept.Instance)
 
 	uncommittedDeps := false
 	// for q := 0; q < r.N; q++ {
@@ -1264,9 +1267,9 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 	// 	}
 	// }
 	status := epaxosproto.PREACCEPTED_EQ
-	if changed {
-		status = epaxosproto.PREACCEPTED
-	}
+	// if changed {
+	// 	status = epaxosproto.PREACCEPTED
+	// }
 
 	if inst != nil {
 		if preAccept.Ballot < inst.ballot {
@@ -1301,9 +1304,9 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 
 	// r.updateConflicts(preAccept.Command, preAccept.Replica, preAccept.Instance, preAccept.Seq)
 
-	r.recordInstanceMetadata(r.getInstance(preAccept.Replica, preAccept.Instance))
-	r.recordCommands(preAccept.Command)
-	r.sync()
+	// r.recordInstanceMetadata(r.getInstance(preAccept.Replica, preAccept.Instance))
+	// r.recordCommands(preAccept.Command)
+	// r.sync()
 
 	// if len(preAccept.Command) == 0 {
 	// 	//checkpoint
@@ -1331,7 +1334,7 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 		r.SendMsg(preAccept.LeaderId, r.preAcceptOKRPC, pok)
 	}
 
-	dlog.Printf("I've replied to the PreAccept at time %f\n", time.Now().UnixNano())
+	// dlog.Printf("I've replied to the PreAccept at time %f\n", time.Now().UnixNano())
 }
 
 func (r *Replica) fastPathQuorum() int {
@@ -1486,7 +1489,7 @@ func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
 
 	inst.lb.preAcceptOKs++
 
-	allCommitted := true
+	// allCommitted := true
 	// if r.N > 3 {
 	// 	// we only need optimized egalitarian paxos for more than 3 replicas
 	// 	// with 3 replicas, the fast path quorum for simple EPaxos is the same as for optimized EPaxos
@@ -1511,59 +1514,59 @@ func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
 	dlog.Printf("[%d.%d] PreAcceptOKs: %d (%d total replicas).\n", r.Id, pareply.Instance,
 		inst.lb.preAcceptOKs, r.N)
 	//can we commit on the fast path?
-	if inst.lb.preAcceptOKs >= r.fastPathQuorum()-1 && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
-		happy++
-		r.getInstance(r.Id, pareply.Instance).Status = epaxosproto.COMMITTED
-		r.updateCommitted(r.Id)
-		inst.lb.committedTime = time.Now()
-		// writeKey0 := false
-		// readKey0 := false
-		if inst.lb.clientProposals != nil {
-			// give clients the all clear
-			for i := 0; i < len(inst.lb.clientProposals); i++ {
-				// if inst.Cmds[i].K == 0 {
-				// 	if inst.Cmds[i].Op == state.PUT {
-				// 		writeKey0 = true
-				// 	} else if inst.Cmds[i].Op == state.GET {
-				// 		readKey0 = true
-				// 	}
-				// }
-				if !r.NeedsWaitForExecute(&inst.Cmds[i]) {
-					dlog.Printf("[%d.%d.%d] Replying to client before execute at time %f.\n", r.Id, pareply.Instance, i, inst.Cmds[i].Op, time.Now().UnixNano())
-					r.ReplyProposeTS(
-						&genericsmrproto.ProposeReplyTS{
-							TRUE,
-							inst.lb.clientProposals[i].CommandId,
-							state.NIL,
-							inst.lb.clientProposals[i].Timestamp,
-							inst.lb.clientProposals[i].ClientId},
-						inst.lb.clientProposals[i].Reply)
-				}
+	// if inst.lb.preAcceptOKs >= r.fastPathQuorum()-1 && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
+	happy++
+	r.getInstance(r.Id, pareply.Instance).Status = epaxosproto.COMMITTED
+	r.updateCommitted(r.Id)
+	inst.lb.committedTime = time.Now()
+	// writeKey0 := false
+	// readKey0 := false
+	if inst.lb.clientProposals != nil {
+		// give clients the all clear
+		for i := 0; i < len(inst.Cmds); i++ {
+			// if inst.Cmds[i].K == 0 {
+			// 	if inst.Cmds[i].Op == state.PUT {
+			// 		writeKey0 = true
+			// 	} else if inst.Cmds[i].Op == state.GET {
+			// 		readKey0 = true
+			// 	}
+			// }
+			if !r.NeedsWaitForExecute(&inst.Cmds[i]) {
+				dlog.Printf("[%d.%d.%d] Replying to client before execute at time %f.\n", r.Id, pareply.Instance, i, inst.Cmds[i].Op, time.Now().UnixNano())
+				r.ReplyProposeTS(
+					&genericsmrproto.ProposeReplyTS{
+						TRUE,
+						inst.lb.clientProposals[i].CommandId,
+						state.NIL,
+						inst.lb.clientProposals[i].Timestamp,
+						inst.lb.clientProposals[i].ClientId},
+					inst.lb.clientProposals[i].Reply)
 			}
 		}
-
-		r.recordInstanceMetadata(inst)
-		r.sync() //is this necessary here?
-		// r.Stats.Increment("fast_path")
-		// if writeKey0 {
-		// 	r.Stats.Increment("fast_writes_0")
-		// } else if readKey0 {
-		// 	r.Stats.Increment("fast_reads_0")
-		// }
-
-		dlog.Printf("[%d.%d] Committing on fast path at time %f.\n", r.Id, pareply.Instance, time.Now().UnixNano())
-		dlog.Printf("[%d.%d] Need wait for deps=%v before execute.\n", r.Id, pareply.Instance, inst.Deps)
-		r.bcastCommit(r.Id, pareply.Instance, inst.Cmds, inst.Seq, inst.Deps)
-	} else if inst.lb.preAcceptOKs >= r.N/2 {
-		if !allCommitted {
-			weird++
-		}
-		slow++
-		inst.Status = epaxosproto.ACCEPTED
-		dlog.Printf("[%d.%d] Slow because allEqual=%v, allCommitted=%v, isInitialBallot=%v,preAcceptOKs=%d,fpq=%d.\n", r.Id,
-			pareply.Instance, inst.lb.allEqual, allCommitted, isInitialBallot(inst.ballot), inst.lb.preAcceptOKs, r.fastPathQuorum())
-		r.bcastAccept(r.Id, pareply.Instance, inst.ballot, int32(len(inst.Cmds)), inst.Seq, inst.Deps)
 	}
+
+	r.recordInstanceMetadata(inst)
+	r.sync() //is this necessary here?
+	// r.Stats.Increment("fast_path")
+	// if writeKey0 {
+	// 	r.Stats.Increment("fast_writes_0")
+	// } else if readKey0 {
+	// 	r.Stats.Increment("fast_reads_0")
+	// }
+
+	// dlog.Printf("[%d.%d] Committing on fast path at time %f.\n", r.Id, pareply.Instance, time.Now().UnixNano())
+	// dlog.Printf("[%d.%d] Need wait for deps=%v before execute.\n", r.Id, pareply.Instance, inst.Deps)
+	r.bcastCommit(r.Id, pareply.Instance, inst.Cmds, inst.Seq, inst.Deps)
+	// } else if inst.lb.preAcceptOKs >= r.N/2 {
+	// 	if !allCommitted {
+	// 		weird++
+	// 	}
+	// 	slow++
+	// 	inst.Status = epaxosproto.ACCEPTED
+	// 	dlog.Printf("[%d.%d] Slow because allEqual=%v, allCommitted=%v, isInitialBallot=%v,preAcceptOKs=%d,fpq=%d.\n", r.Id,
+	// 		pareply.Instance, inst.lb.allEqual, allCommitted, isInitialBallot(inst.ballot), inst.lb.preAcceptOKs, r.fastPathQuorum())
+	// 	r.bcastAccept(r.Id, pareply.Instance, inst.ballot, int32(len(inst.Cmds)), inst.Seq, inst.Deps)
+	// }
 	//TODO: take the slow path if messages are slow to arrive
 }
 
