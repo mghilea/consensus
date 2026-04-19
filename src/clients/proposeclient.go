@@ -7,6 +7,7 @@ import (
 	"genericsmrproto"
 	"log"
 	"state"
+	"strings"
 )
 
 type ProposeClient struct {
@@ -137,6 +138,23 @@ func (c *ProposeClient) sendPropose() {
 			c.writers[i].Flush()
 		}
 	}
+}
+
+func (c *ProposeClient) GetReplicaFromKey(k state.Key) string {
+	shard := c.GetShardFromKey(k)
+	replicaId := shard
+	var replicaAddr string
+	if c.noLeader {
+		if c.forceLeader >= 0 {
+			replicaId = c.forceLeader
+		} else {
+			replicaId = int(c.replicasByPingRank[shard][0])
+		}
+		replicaAddr = strings.Split(c.replicasPerShard[shard][replicaId], ":")[0]
+	} else {
+		replicaAddr = strings.Split(c.leaderAddrs[replicaId], ":")[0]
+	}
+	return replicaAddr
 }
 
 func (c *ProposeClient) readProposeReply(commandId int32, clientId int32) (bool, int64) {

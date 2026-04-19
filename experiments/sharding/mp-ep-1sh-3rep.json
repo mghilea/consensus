@@ -59,12 +59,12 @@
       }
   },
  "client_total": [
-    [15, 20, 25],
-    [15, 20, 25]
+    [25],
+    [25]
   ],
   "client_processes_per_client_node": [
-    [15, 20, 25],
-    [15, 20, 25]
+    [25],
+    [25]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -142,7 +142,7 @@
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "rghilea-297576",
+  "experiment_name": "rghilea-300857",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,
@@ -175,6 +175,6 @@
   "server_disable_gc": false,
   "server_gc_debug_trace": false,
   "server_memprofile": false,
-  "snapshot_enabled": true,
+  "snapshot_enabled": false,
   "max_instance_space_size": 50000
 }
