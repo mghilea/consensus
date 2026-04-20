@@ -33,10 +33,11 @@ def calculate_statistics(config, local_out_directory, delete_files=True):
     op_latencies = collections.defaultdict(list)
     op_latency_counts = collections.defaultdict(int)
     op_times = collections.defaultdict(list)
+    op_replicas = collections.defaultdict(list)
 
     for i in range(config['num_experiment_runs']):
         # Stream and aggregate logs for a single run
-        stats_run, run_op_latencies, run_op_latency_counts, run_op_times = calculate_statistics_for_run(
+        stats_run, run_op_latencies, run_op_latency_counts, run_op_times, run_op_replicas = calculate_statistics_for_run(
             config, local_out_directory, i, delete_files=delete_files
         )
         runs.append(stats_run)
@@ -48,16 +49,18 @@ def calculate_statistics(config, local_out_directory, delete_files=True):
             op_latency_counts[k] += count
         for k, v_list in run_op_times.items():
             op_times[k].extend(v_list)
+        for k, v_list in run_op_replicas.items():
+            op_replicas[k].extend(v_list)
 
     # Compute final aggregated stats
     stats = {'aggregate': {}}
-    calculate_all_op_statistics(config, stats['aggregate'], op_latencies, op_latency_counts, op_times)
+    calculate_all_op_statistics(config, stats['aggregate'], op_latencies, op_latency_counts, op_times, op_replicas)
 
 
     # Compute per-run statistics for easier plotting/analysis
     stats['runs'] = runs
     stats['run_stats'] = {}
-    ignored = {'cdf', 'cdf_log', 'time', 'tput_over_time'}
+    ignored = {'cdf', 'cdf_log', 'time', 'tput_over_time', 'per_replica_latencies'}
 
     # Loop over first run keys to structure stats
     first_run = runs[0] if runs else {}
@@ -94,6 +97,7 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
     region_op_latencies = {}
     region_op_latency_counts = {}
     region_op_times = {}
+    region_op_replicas = {}
 
     stats = {}
 
@@ -130,6 +134,7 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
         op_latencies = collections.defaultdict(list)
         op_latency_counts = collections.defaultdict(int)
         op_times = collections.defaultdict(list)
+        op_replicas = collections.defaultdict(list)
 
         # Process client stats
         for client in config["clients"]:
@@ -153,13 +158,16 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
                                 continue
                             opVal = float(opCols[x+1]) / input_scale * output_scale
                             opTime = float(opCols[x+4])
+                            opReplica = opCols[x+3]
                             op_latencies[op].append(opVal)
                             op_latency_counts[op] += 1
                             op_times[op].append(opTime)
+                            op_replicas[op].append(opReplica)
                             if op not in combine_blacklist:
                                 op_latencies['combined'].append(opVal)
                                 op_latency_counts['combined'] += 1
                                 op_times['combined'].append(opTime)
+                                op_replicas['combined'].append(opReplica)
 
                 # Remove file that was just processed if debug mode is off                
                 if delete_files:
@@ -184,6 +192,8 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
             region_op_latencies.setdefault(k, []).append(v)
         for k, v in op_times.items():
             region_op_times.setdefault(k, []).append(v)
+        for k, v in op_replicas.items():
+            region_op_replicas.setdefault(k, []).append(v)
         for k, v in op_latency_counts.items():
             if k in region_op_latency_counts:
                 region_op_latency_counts[k] = min(region_op_latency_counts[k], v)
@@ -236,11 +246,11 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
     #     stats['commit_rate'] = total_committed / total_attempts
     #     stats['abort_rate'] = 1 - stats['commit_rate']
 
-    calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts, region_op_times)
-    return stats, region_op_latencies, region_op_latency_counts , region_op_times
+    calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts, region_op_times, region_op_replicas)
+    return stats, region_op_latencies, region_op_latency_counts , region_op_times, region_op_replicas
 
 
-def calculate_op_statistics(config, stats, total_recorded_time, op_type, latencies, norm_latencies, times):
+def calculate_op_statistics(config, stats, total_recorded_time, op_type, latencies, norm_latencies, times, replicas):
     if len(latencies) > 0:
         stats[op_type] = calculate_statistics_for_data(latencies)
         stats[op_type]['ops'] = len(latencies)
@@ -251,6 +261,8 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
         if (not 'server_emulate_wan' in config or config['server_emulate_wan']) and len(norm_latencies) > 0:
             stats['%s_norm' % op_type] = calculate_statistics_for_data(norm_latencies)
             stats['%s_norm' % op_type]['samples'] = len(norm_latencies)
+
+        # tput over time
         seconds = [int(ts // 1_000_000_000) for ts in times]
         counts = collections.Counter(seconds)
         min_sec = min(seconds)
@@ -259,9 +271,16 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
         tput_over_time += [counts.get(sec, 0) for sec in range(min_sec, max_sec + 1)]
         stats[op_type]['tput_over_time'] = tput_over_time
 
+        # per-replica CDF
+        num_replicas = max(replicas) + 1
+        per_replica_latencies = [[] for _ in range(num_replicas)]
+        for i, l in enumerate(latencies):
+            replica = replicas[i]
+            per_replica_latencies[replica].append(l)
+        stats[op_type]['per_replica_latencies'] = per_replica_latencies
 
 
-def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts, region_op_times):
+def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts, region_op_times, region_op_replicas):
     total_recorded_time = float(config['client_experiment_length'] -
                                 config['client_ramp_up'] -
                                 config['client_ramp_down'])
@@ -269,6 +288,7 @@ def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_la
     for op, region_lats_list in region_op_latencies.items():
         total_latencies = sum((len(lats) for lats in region_lats_list))
         region_times_list = region_op_times[op]
+        region_replicas_list = region_op_replicas[op]
 
         # Process per region
         for i, region_lats in enumerate(region_lats_list):
@@ -277,7 +297,7 @@ def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_la
                 stats[region_key] = {}
 
             # Compute per-region stats
-            calculate_op_statistics(config, stats[region_key], total_recorded_time, op, region_lats, [], region_times_list[i])
+            calculate_op_statistics(config, stats[region_key], total_recorded_time, op, region_lats, [], region_times_list[i], region_replicas_list[i])
 
         # Compute combined statistics across regions
         norm_latencies = []
@@ -289,7 +309,8 @@ def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_la
         # Aggregate across all regions
         all_latencies = [lat for region_lats in region_lats_list for lat in region_lats]
         all_times = [t for region_times in region_times_list for t in region_times]
-        calculate_op_statistics(config, stats, total_recorded_time, op, all_latencies, norm_latencies, all_times)
+        all_replicas = [r for region_replicas in region_replicas_list for r in region_replicas]
+        calculate_op_statistics(config, stats, total_recorded_time, op, all_latencies, norm_latencies, all_times, all_replicas)
 
 
 def calculate_cdf_for_npdata(npdata):
