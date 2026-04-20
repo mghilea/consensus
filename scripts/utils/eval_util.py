@@ -284,7 +284,7 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
             if not data:
                 continue
 
-            counts = Counter(data)
+            counts = collections.Counter(data)
             sorted_vals = sorted(counts.keys())
             total = len(data)
 
