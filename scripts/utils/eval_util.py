@@ -930,10 +930,11 @@ def generate_cdf_plots(config, local_out_directory, stats, executor):
             cdf_log_plot_name = 'aggregate-%s-log' % op_type
             futures.append(executor.submit(generate_cdf_log_plot, config, plots_directory, cdf_log_plot_name,
                 stats['aggregate'][op_type]['cdf_log']))
-            for i, cdf in stats['aggregate'][op_type]['per_replica_cdf']:
-                cdf_plot_name = 'aggregate-%s-replica-%d' % (op_type, i)
-                futures.append(executor.submit(generate_cdf_plot, config, plots_directory, cdf_plot_name,
-                    cdf))
+            if 'per_replica_cdf' in stats['aggregate'][op_type]:
+                for i, cdf in enumerate(stats['aggregate'][op_type]['per_replica_cdf']):
+                    cdf_plot_name = 'aggregate-%s-replica-%d' % (op_type, i)
+                    futures.append(executor.submit(generate_cdf_plot, config, plots_directory, cdf_plot_name,
+                        cdf))
         elif 'region-' in op_type:
             for op_type2 in stats['aggregate'][op_type]:
                 if not op_type2 in config['client_cdf_plot_blacklist']:
@@ -944,7 +945,7 @@ def generate_cdf_plots(config, local_out_directory, stats, executor):
                     futures.append(executor.submit(generate_cdf_log_plot, config, plots_directory, cdf_log_plot_name,
                         stats['aggregate'][op_type][op_type2]['cdf_log']))
                     if 'per_replica_cdf' in stats['aggregate'][op_type]:
-                        for i, cdf in stats['aggregate'][op_type]['per_replica_cdf']:
+                        for i, cdf in enumerate(stats['aggregate'][op_type]['per_replica_cdf']):
                             cdf_plot_name = 'aggregate-%s-replica-%d' % (op_type, i)
                             futures.append(executor.submit(generate_cdf_plot, config, plots_directory, cdf_plot_name,
                                 cdf))
@@ -961,7 +962,7 @@ def generate_cdf_plots(config, local_out_directory, stats, executor):
                     futures.append(executor.submit(generate_cdf_log_plot, config, plots_directory, cdf_log_plot_name,
                         stats['runs'][i][op_type]['cdf']))
                     if 'per_replica_cdf' in stats['runs'][i][op_type]:
-                        for idx, cdf in stats['runs'][i][op_type]['per_replica_cdf']:
+                        for idx, cdf in enumerate(stats['runs'][i][op_type]['per_replica_cdf']):
                             cdf_plot_name = 'run-%d-%s-replica-%d' % (i, op_type, idx)
                             futures.append(executor.submit(generate_cdf_plot, config, plots_directory, cdf_plot_name,
                                 cdf))
@@ -976,7 +977,7 @@ def generate_cdf_plots(config, local_out_directory, stats, executor):
                             futures.append(executor.submit(generate_cdf_log_plot, config, plots_directory, cdf_log_plot_name,
                                 stats['runs'][i][op_type][op_type2]['cdf']))
                             if 'per_replica_cdf' in stats['runs'][i][op_type][op_type2]:
-                                for idx, cdf in stats['runs'][i][op_type][op_type2]['per_replica_cdf']:
+                                for idx, cdf in enumerate(stats['runs'][i][op_type][op_type2]['per_replica_cdf']):
                                     cdf_plot_name = 'run-%d-%s-replica-%d' % (i, op_type, idx)
                                     futures.append(executor.submit(generate_cdf_plot, config, plots_directory, cdf_plot_name,
                                         cdf))
