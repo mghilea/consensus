@@ -274,10 +274,30 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
         # per-replica CDF
         num_replicas = max(replicas) + 1
         per_replica_latencies = [[] for _ in range(num_replicas)]
+        per_replica_cdf = [[] for _ in range(num_replicas)]
+
         for i, l in enumerate(latencies):
             replica = replicas[i]
             per_replica_latencies[replica].append(l)
-        stats[op_type]['per_replica_latencies'] = per_replica_latencies
+
+        for replica_id, data in enumerate(per_replica_latencies):
+            if not data:
+                continue
+
+            counts = Counter(data)
+            sorted_vals = sorted(counts.keys())
+            total = len(data)
+
+            cumulative = 0
+            cdf = []
+
+            for val in sorted_vals:
+                cumulative += counts[val]
+                cdf.append([val, cumulative / total])
+
+            per_replica_cdf[replica_id] = cdf
+
+        stats[op_type]['per_replica_cdf'] = per_replica_cdf
 
 
 def calculate_all_op_statistics(config, stats, region_op_latencies, region_op_latency_counts, region_op_times, region_op_replicas):
