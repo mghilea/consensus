@@ -274,6 +274,7 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
         # per-replica CDF
         num_replicas = max(replicas) + 1
         per_replica_latencies = [[] for _ in range(num_replicas)]
+        per_replica_cdf = [[] for _ in range(num_replicas)]
 
         for i, l in enumerate(latencies):
             replica = replicas[i]
