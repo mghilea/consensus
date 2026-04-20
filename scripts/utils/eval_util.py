@@ -930,6 +930,10 @@ def generate_cdf_plots(config, local_out_directory, stats, executor):
             cdf_log_plot_name = 'aggregate-%s-log' % op_type
             futures.append(executor.submit(generate_cdf_log_plot, config, plots_directory, cdf_log_plot_name,
                 stats['aggregate'][op_type]['cdf_log']))
+            for i, cdf in stats['aggregate'][op_type]['per_replica_cdf']:
+                cdf_plot_name = 'aggregate-%s-replica-%d' % (op_type, i)
+                futures.append(executor.submit(generate_cdf_plot, config, plots_directory, cdf_plot_name,
+                    cdf))
         elif 'region-' in op_type:
             for op_type2 in stats['aggregate'][op_type]:
                 if not op_type2 in config['client_cdf_plot_blacklist']:
@@ -939,6 +943,10 @@ def generate_cdf_plots(config, local_out_directory, stats, executor):
                     cdf_log_plot_name = 'aggregate-%s-%s-log' % (op_type, op_type2)
                     futures.append(executor.submit(generate_cdf_log_plot, config, plots_directory, cdf_log_plot_name,
                         stats['aggregate'][op_type][op_type2]['cdf_log']))
+                    for i, cdf in stats['aggregate'][op_type]['per_replica_cdf']:
+                        cdf_plot_name = 'aggregate-%s-replica-%d' % (op_type, i)
+                        futures.append(executor.submit(generate_cdf_plot, config, plots_directory, cdf_plot_name,
+                            cdf))
 
 
     for i in range(len(stats['runs'])):
@@ -951,6 +959,10 @@ def generate_cdf_plots(config, local_out_directory, stats, executor):
                     cdf_log_plot_name = 'run-%d-%s-log' % (i, op_type)
                     futures.append(executor.submit(generate_cdf_log_plot, config, plots_directory, cdf_log_plot_name,
                         stats['runs'][i][op_type]['cdf']))
+                    for idx, cdf in stats['runs'][i][op_type]['per_replica_cdf']:
+                        cdf_plot_name = 'run-%d-%s-replica-%d' % (i, op_type, idx)
+                        futures.append(executor.submit(generate_cdf_plot, config, plots_directory, cdf_plot_name,
+                            cdf))
             elif 'region-' in op_type:
                 for op_type2 in stats['runs'][i][op_type]:
                     if not op_type2 in config['client_cdf_plot_blacklist']:
@@ -961,6 +973,10 @@ def generate_cdf_plots(config, local_out_directory, stats, executor):
                             cdf_log_plot_name = 'run-%d-%s-%s-log' % (i, op_type, op_type2)
                             futures.append(executor.submit(generate_cdf_log_plot, config, plots_directory, cdf_log_plot_name,
                                 stats['runs'][i][op_type][op_type2]['cdf']))
+                            for idx, cdf in stats['runs'][i][op_type][op_type2]['per_replica_cdf']:
+                                cdf_plot_name = 'run-%d-%s-replica-%d' % (i, op_type, idx)
+                                futures.append(executor.submit(generate_cdf_plot, config, plots_directory, cdf_plot_name,
+                                    cdf))
     concurrent.futures.wait(futures)
 
 def generate_lot_plots(config, local_out_directory, stats, op_latencies, executor):
