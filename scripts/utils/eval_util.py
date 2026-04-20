@@ -158,7 +158,7 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
                                 continue
                             opVal = float(opCols[x+1]) / input_scale * output_scale
                             opTime = float(opCols[x+4])
-                            opReplica = opCols[x+3]
+                            opReplica =float(opCols[x+3])
                             op_latencies[op].append(opVal)
                             op_latency_counts[op] += 1
                             op_times[op].append(opTime)
