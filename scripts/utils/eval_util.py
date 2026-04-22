@@ -279,7 +279,7 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
             replica = replicas[i]
             per_replica_latencies[replica].append(l)
 
-        for replica_id, data in enumerate(per_replica_latencies):
+        for replica_id, data in per_replica_latencies:
             if not data:
                 continue
 
