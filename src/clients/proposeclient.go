@@ -7,6 +7,7 @@ import (
 	"genericsmrproto"
 	"log"
 	"state"
+	"time"
 )
 
 type ProposeClient struct {
@@ -31,6 +32,7 @@ func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader i
 	pc.RegisterRPC(new(genericsmrproto.ProposeReplyTS), clientproto.GEN_PROPOSE_REPLY,
 		pc.proposeReplyChan)
 	if noLeader {
+		time.Sleep(time.Duration(5) * time.Second) // sleep to allow replicas to connect with one another
 		pc.ConnectToReplicas()
 		pc.DetermineReplicaPings()
 	}
