@@ -188,7 +188,7 @@ type Result struct {
 	op   string
 	lat  int64
 	key  int32
-	cnt  int32
+	cnt  string
 	time int64
 }
 
@@ -200,7 +200,7 @@ type ClientJob struct {
 	replyChan chan fastrpc.Serializable
 	startTime time.Time
 	opCount   int32
-	replica   int
+	replica   string
 }
 
 func createClientWithID(uniqueID int32, replyChan chan fastrpc.Serializable) *clients.ProposeClient {
@@ -242,7 +242,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
             client := createClientWithID(uniqueID, replyChan)
 			r := rand.New(rand.NewSource(int64(uniqueID) + time.Now().UnixNano()))
 			zipf, _ := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
-            clients[idx] = ClientJob{uniqueID, *client, r, zipf, replyChan, time.Now(), 0, 0}
+            clients[idx] = ClientJob{uniqueID, *client, r, zipf, replyChan, time.Now(), 0, ""}
         }(i)
     }
     initWg.Wait()
@@ -283,7 +283,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 			keys[j] = int64(c.zipf.Uint64())
 		}
 
-		c.replica = c.client.GetShardFromKey(state.Key(keys[0]))
+		c.replica = c.client.GetReplicaFromKey(state.Key(keys[0]))
 		
 		c.startTime = time.Now()
 		dlog.Printf("Client thread %d sending request for clientId %d and commandId %d at %v\n", threadId, c.id, c.opCount, c.startTime.UnixNano())
@@ -313,11 +313,11 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 			if elapsed >= rampUpTime && elapsed < expEndTime {
 				if resp.OK != 0 { 
 					count++
-					results <- Result{"write", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), int32(c.replica), time.Now().UnixNano()}
-					results <- Result{"app", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), int32(c.replica), time.Now().UnixNano()}
+					results <- Result{"write", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), c.replica, time.Now().UnixNano()}
+					results <- Result{"app", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), c.replica, time.Now().UnixNano()}
 				}
 			} else {
-				results <- Result{"write", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), int32(c.replica), time.Now().UnixNano()}
+				results <- Result{"write", lat, int32(startIdx) + clientIdx + int32(*clientId*1000000), c.replica, time.Now().UnixNano()}
 			}
 
 			// time.Sleep(time.Duration(10) * time.Second)
@@ -343,7 +343,7 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 				keys[j] = int64(c.zipf.Uint64())
 			}
 
-			c.replica = c.client.GetShardFromKey(state.Key(keys[0]))
+			c.replica = c.client.GetReplicaFromKey(state.Key(keys[0]))
 			
 			c.startTime = time.Now()
 			dlog.Printf("Client thread %d sending request for clientId %d op %d at %v\n", threadId, c.id, c.opCount, c.startTime.UnixNano())

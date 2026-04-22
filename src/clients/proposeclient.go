@@ -139,6 +139,23 @@ func (c *ProposeClient) sendPropose() {
 	}
 }
 
+func (c *ProposeClient) GetReplicaFromKey(k state.Key) string {
+	shard := c.GetShardFromKey(k)
+	replicaId := shard
+	var replicaAddr string
+	if c.noLeader {
+		if c.forceLeader >= 0 {
+			replicaId = c.forceLeader
+		} else {
+			replicaId = int(c.replicasByPingRank[shard][0])
+		}
+		replicaAddr = c.replicasPerShard[shard][replicaId]
+	} else {
+		replicaAddr = c.leaderAddrs[replicaId]
+	}
+	return replicaAddr
+}
+
 func (c *ProposeClient) readProposeReply(commandId int32, clientId int32) (bool, int64) {
 	for !c.shutdown {
 		reply := (<-c.proposeReplyChan).(*genericsmrproto.ProposeReplyTS)
