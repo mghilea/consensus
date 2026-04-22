@@ -187,7 +187,7 @@ func createClient() clients.Client {
 			*epaxosMode)
 	case "epaxos":
 		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, true)
+			*statsFile, false, true, false)
 	case "mdl":
 		return clients.NewMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true, *singleShardAware)
@@ -196,7 +196,7 @@ func createClient() clients.Client {
 			*statsFile, false, false)
 	default:
 		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, false)
+			*statsFile, false, false, false)
 	}
 }
 

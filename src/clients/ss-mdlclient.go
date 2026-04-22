@@ -24,7 +24,7 @@ type SSMDLClient struct {
 func NewSSMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
 	fast bool, noLeader bool) *SSMDLClient {
 	pc := &SSMDLClient{
-		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile),
+		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile, false),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE), // proposeReplyChan
 		new(mdlinproto.Propose),             // propose
 		0,                                   // opCount

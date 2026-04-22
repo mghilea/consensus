@@ -20,7 +20,7 @@ type NaiveClient struct {
 func NewNaiveClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
 	fast bool, noLeader bool) *ProposeClient {
 	pc := &ProposeClient{
-		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile),
+		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile, false),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE), // proposeReplyChan
 		new(genericsmrproto.Propose),                                 // propose
 		0,                                                            // opCount

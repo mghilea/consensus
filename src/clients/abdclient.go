@@ -59,7 +59,7 @@ type AbdClient struct {
 
 func NewAbdClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string, regular bool) *AbdClient {
 	abdc := &AbdClient{
-		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile),
+		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile, false),
 		make(chan fastrpc.Serializable, CHAN_BUFFER_SIZE), // readReplyChan
 		make(chan fastrpc.Serializable, CHAN_BUFFER_SIZE), // writeReplyChan
 		new(abdproto.Read),                      // read

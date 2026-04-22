@@ -20,9 +20,9 @@ type ProposeClient struct {
 }
 
 func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
-	fast bool, noLeader bool, replyChan chan fastrpc.Serializable) *ProposeClient {
+	fast bool, noLeader bool, replyChan chan fastrpc.Serializable, isLANsetting bool) *ProposeClient {
 	pc := &ProposeClient{
-		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile),
+		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile, isLANsetting),
 		replyChan,                                                    // proposeReplyChan
 		new(genericsmrproto.Propose),                                 // propose
 		0,                                                            // opCount

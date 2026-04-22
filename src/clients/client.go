@@ -79,9 +79,10 @@ type AbstractClient struct {
 	replicaWriters     [][]*bufio.Writer
 	replicaRetries     [][]int
 	replicaAlive       [][]bool
+	isLANsetting       bool
 }
 
-func NewAbstractClient(id int32, coordinatorAddr string, coordinatorPort int, forceLeader int, statsFile string) *AbstractClient {
+func NewAbstractClient(id int32, coordinatorAddr string, coordinatorPort int, forceLeader int, statsFile string, isLANsetting bool) *AbstractClient {
 	c := &AbstractClient{
 		id,                            // id
 		coordinatorAddr,               // coordinatorAddr
@@ -114,6 +115,7 @@ func NewAbstractClient(id int32, coordinatorAddr string, coordinatorPort int, fo
 		make([][]*bufio.Writer, 0),      // replicaWriters
 		make([][]int, 0),                // replicaRetries
 		make([][]bool, 0),               // replicasAlive
+		isLANsetting,                    // isLANsetting
 	}
 	c.RegisterRPC(new(clientproto.PingReply), clientproto.GEN_PING_REPLY, c.pingReplyChan)
 
@@ -338,20 +340,7 @@ func (c *AbstractClient) DetermineReplicaPings() {
 		}
 	}
 
-	// Determine if it's LAN setting
-	min, max := c.replicaPing[0][0], c.replicaPing[0][len(c.replicaPing[0])-1]
-    for _, v := range c.replicaPing[0] {
-        if v < min {
-            min = v
-        }
-        if v > max {
-            max = v
-        }
-    }
-
-	diff := time.Duration(max - min)
-    isLANsetting := diff < 2*time.Millisecond
-    log.Printf("isLANsetting=%t\n", isLANsetting)
+    log.Printf("isLANsetting=%t\n", c.isLANsetting)
 
 	for i := range c.replicasByPingRank {
 		for j := range c.replicasByPingRank[i] {
@@ -360,10 +349,10 @@ func (c *AbstractClient) DetermineReplicaPings() {
 		log.Printf("replicaPing[%d]=%v\n", i, c.replicaPing[i])
 	}
 
-	if isLANsetting {
+	if c.isLANsetting {
 		// assign replicas round-robin in LAN
 		for i := 0; i < len(c.replicasByPingRank); i++ {
-			pivot := c.id % int32(len(c.replicasByPingRank))
+			pivot := c.id % int32(len(c.replicasByPingRank[i]))
 			original := c.replicasByPingRank[i]
         	rank := append(original[pivot:], original[:pivot]...)
         	c.replicasByPingRank[i] = rank

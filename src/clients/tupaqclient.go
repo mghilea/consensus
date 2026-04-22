@@ -96,7 +96,7 @@ func NewGryffClient(id int32, masterAddr string, masterPort int,
 	proxy bool, thrifty bool, useDefaultReplicaOrder bool,
 	epaxosMode bool) *GryffClient {
 	tc := &GryffClient{
-		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile),
+		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile, false),
 		nil,
 		make(chan fastrpc.Serializable, CHAN_BUFFER_SIZE), // read1ReplyChan
 		make(chan fastrpc.Serializable, CHAN_BUFFER_SIZE), // read2ReplyChan

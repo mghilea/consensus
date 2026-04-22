@@ -22,7 +22,7 @@ func createClient(clientId int32) clients.Client {
           !*linearizability, !*linearizability, false, false, true, false)
     default:
       return clients.NewProposeClient(clientId, *masterAddr, *masterPort, -1,
-          "", false, false)
+          "", false, false, false)
   }
 }
 

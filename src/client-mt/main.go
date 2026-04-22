@@ -184,6 +184,11 @@ var zipfV = flag.Float64(
 	"Zipfian v parameter. Generates values k∈ [0, numKeys] such that P(k) is "+
 		"proportional to (v + k) ** (-s)")
 
+var lan *bool = flag.Bool(
+	"lan",
+	false,
+	"Experiment is run in LAN setting.")
+
 type Result struct {
 	op   string
 	lat  int64
@@ -207,10 +212,10 @@ func createClientWithID(uniqueID int32, replyChan chan fastrpc.Serializable) *cl
 	switch *replProtocol {
 	case "epaxos":
 		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, true, replyChan)
+			*statsFile, false, true, replyChan, *lan)
 	default:
 		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, false, replyChan)
+			*statsFile, false, false, replyChan, *lan)
 	}
 }
 

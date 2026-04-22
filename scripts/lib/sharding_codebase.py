@@ -130,6 +130,8 @@ class ShardingCodebase(ExperimentCodebase):
             client_command += ' -proxy'
         if 'server_thrifty' in config['replication_protocol_settings'] and config['replication_protocol_settings']['server_thrifty']:
             client_command += ' -thrifty'
+        if 'server_emulate_wan' not in config or ('server_emulate_wan' in config and not config['server_emulate_wan']):
+            client_command += ' -lan'
         if 'client_tail_at_scale' in config and config['client_tail_at_scale'] > 0:
             client_command += ' -tailAtScale %d' % config['client_tail_at_scale']
         if 'client_gc_debug_trace' in config and config['client_gc_debug_trace']:
@@ -142,6 +144,7 @@ class ShardingCodebase(ExperimentCodebase):
                 client_command = 'GOGC=off; %s' % client_command
             else:
                 client_command = 'setenv GOGC off; %s' % client_command
+
 
         if is_exp_local(config):
             stdout_file = os.path.join(exp_directory,
