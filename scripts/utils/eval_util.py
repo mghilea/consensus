@@ -158,7 +158,7 @@ def calculate_statistics_for_run(config, local_out_directory, run, delete_files=
                                 continue
                             opVal = float(opCols[x+1]) / input_scale * output_scale
                             opTime = float(opCols[x+4])
-                            opReplica =int(opCols[x+3])
+                            opReplica = opCols[x+3]
                             op_latencies[op].append(opVal)
                             op_latency_counts[op] += 1
                             op_times[op].append(opTime)
@@ -272,9 +272,8 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
         stats[op_type]['tput_over_time'] = tput_over_time
 
         # per-replica CDF
-        num_replicas = max(replicas) + 1
-        per_replica_latencies = [[] for _ in range(num_replicas)]
-        per_replica_cdf = [[] for _ in range(num_replicas)]
+        per_replica_latencies = {}
+        per_replica_cdf = {}
 
         for i, l in enumerate(latencies):
             replica = replicas[i]
