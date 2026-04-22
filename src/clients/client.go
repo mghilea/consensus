@@ -350,7 +350,7 @@ func (c *AbstractClient) DetermineReplicaPings() {
     }
 
 	diff := time.Duration(max - min)
-    isLANsetting := diff < 2*time.Millisecond
+    isLANsetting := diff < 5*time.Millisecond
     log.Printf("isLANsetting=%t\n", isLANsetting)
 
 	for i := range c.replicasByPingRank {
