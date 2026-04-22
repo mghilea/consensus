@@ -149,9 +149,9 @@ func (c *ProposeClient) GetReplicaFromKey(k state.Key) string {
 		} else {
 			replicaId = int(c.replicasByPingRank[shard][0])
 		}
-		replicaAddr = c.replicasPerShard[shard][replicaId]
+		replicaAddr = c.replicasPerShard[shard][replicaId].split(":")[0]
 	} else {
-		replicaAddr = c.leaderAddrs[replicaId]
+		replicaAddr = c.leaderAddrs[replicaId].split(":")[0]
 	}
 	return replicaAddr
 }

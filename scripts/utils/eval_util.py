@@ -272,8 +272,8 @@ def calculate_op_statistics(config, stats, total_recorded_time, op_type, latenci
         stats[op_type]['tput_over_time'] = tput_over_time
 
         # per-replica CDF
-        per_replica_latencies = {}
-        per_replica_cdf = {}
+        per_replica_latencies = collections.defaultdict(list)
+        per_replica_cdf = collections.defaultdict(list)
 
         for i, l in enumerate(latencies):
             replica = replicas[i]
