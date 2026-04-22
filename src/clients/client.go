@@ -339,18 +339,19 @@ func (c *AbstractClient) DetermineReplicaPings() {
 	}
 
 	// Determine if it's LAN setting
-	min, max := c.replicaPing[0][0], c.replicaPing[0][len(c.replicaPing[0])-1]
-    for _, v := range c.replicaPing[0] {
-        if v < min {
-            min = v
-        }
-        if v > max {
-            max = v
-        }
-    }
+	// min, max := c.replicaPing[0][0], c.replicaPing[0][len(c.replicaPing[0])-1]
+    // for _, v := range c.replicaPing[0] {
+    //     if v < min {
+    //         min = v
+    //     }
+    //     if v > max {
+    //         max = v
+    //     }
+    // }
 
-	diff := time.Duration(max - min)
-    isLANsetting := diff < 5*time.Millisecond
+	// diff := time.Duration(max - min)
+	isLANsetting := true
+    // isLANsetting := diff < 5*time.Millisecond
     log.Printf("isLANsetting=%t\n", isLANsetting)
 
 	for i := range c.replicasByPingRank {
