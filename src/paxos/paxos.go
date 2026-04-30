@@ -606,6 +606,15 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 }
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
+	propreply := &genericsmrproto.ProposeReplyTS{
+					TRUE,
+					propose.CommandId,
+					state.NIL,
+					propose.Timestamp,
+					propose.ClientId}
+	// dlog.Printf("Replying to client request after accept for clientId %d and commandId %d at timestamp %f\n", propreply.ClientId, propreply.CommandId, time.Now().UnixNano())
+	r.ReplyProposeTS(propreply, propose.Reply)
+	return
 
 
 	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)

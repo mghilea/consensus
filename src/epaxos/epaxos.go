@@ -1115,6 +1115,14 @@ func bfFromCommands(cmds []state.Command) *bloomfilter.Bloomfilter {
 ***********************************************************************/
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
+	r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{
+						TRUE,
+						propose.CommandId,
+						state.NIL,
+						propose.Timestamp,
+						propose.ClientId},
+					propose.Reply)
+	return
 	//TODO!! Handle client retries
 
 	batchSize := 1 //len(r.ProposeChan) + 1
