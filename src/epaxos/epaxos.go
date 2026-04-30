@@ -663,7 +663,7 @@ func (r *Replica) executeCommands() {
 	for !r.Shutdown {
 		executed := false
 		for q := 0; q < r.N; q++ {
-			inst := int32(0)
+			inst := int32(r.logOffset[q])
 			for inst = r.ExecedUpTo[q] + 1; inst < r.crtInstance[q]; inst++ {
 				// if r.getInstance(int32(q), inst) != nil && r.getInstance(int32(q), inst).Status == epaxosproto.EXECUTED {
 				// 	dlog.Printf("[%d.%d] Already execed via dependent instance.\n", q, inst)
@@ -1710,30 +1710,31 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 	// dlog.Printf("[%d.%d] Received Commit.\n", commit.Replica, commit.Instance)
 	inst := r.getInstance(commit.Replica, commit.Instance)
 
-	if commit.Seq >= r.maxSeq {
-		r.maxSeq = commit.Seq + 1
-	}
+	// if commit.Seq >= r.maxSeq {
+	// 	r.maxSeq = commit.Seq + 1
+	// }
 
-	if commit.Instance >= r.crtInstance[commit.Replica] {
-		r.crtInstance[commit.Replica] = commit.Instance + 1
-	}
+	// if commit.Instance >= r.crtInstance[commit.Replica] {
+	// 	r.crtInstance[commit.Replica] = commit.Instance + 1
+	// }
 
-	if inst != nil {
-		if inst.lb != nil && inst.lb.clientProposals != nil && len(commit.Command) == 0 {
-			//someone committed a NO-OP, but we have proposals for this instance
-			//try in a different instance
-			for _, p := range inst.lb.clientProposals {
-				r.ProposeChan <- p
-			}
-			inst.lb = nil
-		}
-		// in case we need to execute commands
-		inst.Cmds = commit.Command
-		inst.Seq = commit.Seq
-		inst.Deps = commit.Deps
-		inst.Status = epaxosproto.COMMITTED
-	} else {
+	// if inst != nil {
+	// 	if inst.lb != nil && inst.lb.clientProposals != nil && len(commit.Command) == 0 {
+	// 		//someone committed a NO-OP, but we have proposals for this instance
+	// 		//try in a different instance
+	// 		for _, p := range inst.lb.clientProposals {
+	// 			r.ProposeChan <- p
+	// 		}
+	// 		inst.lb = nil
+	// 	}
+	// 	// in case we need to execute commands
+	// 	inst.Cmds = commit.Command
+	// 	inst.Seq = commit.Seq
+	// 	inst.Deps = commit.Deps
+	// 	inst.Status = epaxosproto.COMMITTED
+	// } else {
 		// dlog.Printf("[%d.%d] Updated with committed instance.\n", commit.Replica, commit.Instance)
+	if inst != nil {
 		r.setInstance(commit.Replica, int32(commit.Instance), &Instance{
 			commit.Command,
 			0,
@@ -1745,6 +1746,7 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 			0,
 			nil,
 			commit.Instance})
+	}
 
 		// r.updateConflicts(commit.Command, commit.Replica, commit.Instance, commit.Seq)
 
@@ -1757,11 +1759,11 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 		// 	//discard dependency hashtables
 		// 	r.clearHashtables()
 		// }
-	}
+	// }
 	r.updateCommitted(commit.Replica)
 
-	r.recordInstanceMetadata(r.getInstance(commit.Replica, commit.Instance))
-	r.recordCommands(commit.Command)
+	// r.recordInstanceMetadata(r.getInstance(commit.Replica, commit.Instance))
+	// r.recordCommands(commit.Command)
 }
 
 func (r *Replica) handleCommitShort(commit *epaxosproto.CommitShort) {

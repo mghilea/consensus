@@ -148,7 +148,7 @@ func (c *ProposeClient) GetReplicaFromKey(k state.Key) string {
 		if c.forceLeader >= 0 {
 			replicaId = c.forceLeader
 		} else {
-			replicaId = int(c.replicasByPingRank[shard][0])
+			replicaId = 0 //int(c.replicasByPingRank[shard][0])
 		}
 		replicaAddr = strings.Split(c.replicasPerShard[shard][replicaId], ":")[0]
 	} else {

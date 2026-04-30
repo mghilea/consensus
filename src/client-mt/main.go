@@ -322,6 +322,12 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 
 			// time.Sleep(time.Duration(10) * time.Second)
 
+			time.Sleep(time.Duration(c.r.Intn(1e5)))
+
+			// if elapsed < time.Duration(c.opCount)*5*time.Millisecond {
+			// 	time.Sleep(time.Duration(c.opCount)*5*time.Millisecond - elapsed)
+			// }
+
 			// Send the next request on the same client
 			if *randSleep > 0 {
 				time.Sleep(time.Duration(c.r.Intn(*randSleep * 1e6)))
