@@ -1,0 +1,960 @@
+package dpaxos
+
+import (
+	"bytes"
+	"dlog"
+	"encoding/binary"
+	"fastrpc"
+	"genericsmr"
+	"genericsmrproto"
+	"io"
+	"log"
+	"os"
+	"paxosproto"
+	"state"
+	"time"
+  "net/rpc"
+  "fmt"
+  "masterproto"
+)
+
+const CHAN_BUFFER_SIZE = 200000
+const TRUE = uint8(1)
+const FALSE = uint8(0)
+
+const MAX_BATCH = 5000
+const EPOCH_LENGTH = 500
+const COMPACTION_SLEEP_INTERVAL = 10 * time.Millisecond
+const PREALLOCATED_INSTANCE_SPACE = 15*1024*1024
+
+type Replica struct {
+	*genericsmr.Replica // extends a generic Paxos replica
+	prepareChan         chan fastrpc.Serializable
+	acceptChan          chan fastrpc.Serializable
+	commitChan          chan fastrpc.Serializable
+	commitShortChan     chan fastrpc.Serializable
+	prepareReplyChan    chan fastrpc.Serializable
+	acceptReplyChan     chan fastrpc.Serializable
+	prepareRPC          uint8
+	acceptRPC           uint8
+	commitRPC           uint8
+	commitShortRPC      uint8
+	prepareReplyRPC     uint8
+	acceptReplyRPC      uint8
+	IsLeader            bool        // does this replica think it is the leader
+	instanceSpace       []*Instance // the space of all instances (used and not yet used)
+	crtInstance         int32       // highest active instance number that this replica knows about
+	defaultBallot       int32       // default ballot for new instances (0 until a Prepare(ballot, instance->infinity) from a leader)
+	Shutdown            bool
+	counter             int
+	flush               bool
+	committedUpTo       int32
+	before		        time.Time
+	after		        time.Time
+	batchingEnabled     bool
+	epochlen	        int
+	logOffset           int32
+	snapshotEnabled     bool
+	snapshotFile        string
+	maxInstanceSpaceSize int
+}
+
+type InstanceStatus int
+
+const (
+	PREPARING InstanceStatus = iota
+	PREPARED
+	ACCEPTED
+	COMMITTED
+)
+
+type Instance struct {
+	cmds   []state.Command
+	ballot int32
+	status InstanceStatus
+	lb     *LeaderBookkeeping
+}
+
+type LeaderBookkeeping struct {
+	clientProposals []*genericsmr.Propose
+	maxRecvBallot   int32
+	prepareOKs      int
+	acceptOKs       int
+	nacks           int
+}
+
+func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool, exec bool, dreply bool, 
+	beacon bool, durable bool, statsFile string, batch bool, epochLength int, snapshotEnabled bool, snapshotFile string, maxInstanceSpaceSize int) *Replica {
+	// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
+	r := &Replica{genericsmr.NewReplica(1, id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, 3*genericsmr.CHAN_BUFFER_SIZE),
+		0, 0, 0, 0, 0, 0,
+		false,
+		make([]*Instance, PREALLOCATED_INSTANCE_SPACE),
+		0,
+		-1,
+		false,
+		0,
+		true,
+		-1,
+		time.Now(),
+		time.Now(),
+		batch,
+		epochLength,
+		0,
+		snapshotEnabled,
+		snapshotFile,
+		maxInstanceSpaceSize}
+
+
+	log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
+	r.Beacon = beacon
+	r.Durable = durable
+
+	r.prepareRPC = r.RegisterRPC(new(paxosproto.Prepare), r.prepareChan)
+	r.acceptRPC = r.RegisterRPC(new(paxosproto.Accept), r.acceptChan)
+	r.commitRPC = r.RegisterRPC(new(paxosproto.Commit), r.commitChan)
+	r.commitShortRPC = r.RegisterRPC(new(paxosproto.CommitShort), r.commitShortChan)
+	r.prepareReplyRPC = r.RegisterRPC(new(paxosproto.PrepareReply), r.prepareReplyChan)
+	r.acceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.acceptReplyChan)
+	go r.run(masterAddr, masterPort)
+
+	return r
+}
+
+func (r *Replica) getInstance(i int32) *Instance {
+	if i < r.logOffset {
+		return nil
+	}
+
+	return r.instanceSpace[i%PREALLOCATED_INSTANCE_SPACE]
+}
+
+func (r *Replica) setInstance(i int32, inst *Instance) {
+	if i < r.logOffset {
+		return
+	}
+
+	r.instanceSpace[i%PREALLOCATED_INSTANCE_SPACE] = inst
+}
+
+func (r *Replica) serializeInstancesSnapshot(instances []*Instance) []byte {
+	buf := &bytes.Buffer{}
+
+	// load previous snapshot
+	latest := r.readSnapshot()
+
+	// merge new commands
+	for _, inst := range instances {
+		if inst == nil || inst.cmds == nil {
+			continue
+		}
+
+		for _, cmd := range inst.cmds {
+			key := int64(cmd.K)
+			latest[key] = cmd
+		}
+	}
+
+	// write committedUpTo
+	binary.Write(buf, binary.LittleEndian, r.committedUpTo)
+
+	// write command count
+	binary.Write(buf, binary.LittleEndian, int32(len(latest)))
+
+	// write the key-value pairs in the snapshot
+	for _, cmd := range latest {
+		cmd.Marshal(buf)
+	}
+
+	return buf.Bytes()
+}
+
+func (r *Replica) runSnapshotCompaction() {
+	const sleepInterval = COMPACTION_SLEEP_INTERVAL
+
+	for !r.Shutdown {
+		if r.snapshotEnabled && r.crtInstance- r.logOffset > int32(r.maxInstanceSpaceSize) {
+			r.updateCommittedUpTo()
+
+			trimCount := int(r.committedUpTo - r.logOffset)
+			if trimCount > 0 {
+				toCompact := make([]*Instance, 0, trimCount)
+
+				cap := int32(PREALLOCATED_INSTANCE_SPACE)
+				start := r.logOffset % cap
+				end := (r.logOffset + int32(trimCount)) % cap
+
+				if start < end {
+					// no wrap
+					toCompact = r.instanceSpace[start:end]
+				} else {
+					// wrapped
+					toCompact = append(toCompact,
+						r.instanceSpace[start:cap]...)
+					toCompact = append(toCompact,
+						r.instanceSpace[0:end]...)
+				}
+
+				// serialize only latest commands per key
+				data := r.serializeInstancesSnapshot(toCompact)
+
+				if r.snapshotFile != "" {
+					tmpFile := r.snapshotFile + ".tmp"
+
+					// write snapshot to temp file
+					if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+						log.Printf("Error writing snapshot temp file: %v", err)
+					} else {
+						// atomically replace the snapshot file
+						if err := os.Rename(tmpFile, r.snapshotFile); err != nil {
+							log.Printf("Error renaming snapshot temp file: %v", err)
+						} else {
+							log.Printf("Snapshot saved to %s", r.snapshotFile)
+						}
+					}
+				}
+
+				// free up in-memory instanceSpace
+				for i := r.logOffset; i < r.logOffset + int32(trimCount); i++ {
+					r.setInstance(i, nil)
+				}
+				r.logOffset += int32(trimCount)
+
+				log.Printf("Snapshot-compacted %d instances, logOffset=%d, crtInstance len=%d, committedUpTo=%d",
+					trimCount, r.logOffset, r.crtInstance, r.committedUpTo)
+			}
+		}
+
+		time.Sleep(sleepInterval)
+	}
+}
+
+func (r *Replica) readSnapshot() map[int64]state.Command {
+	latest := make(map[int64]state.Command)
+
+	if r.snapshotFile == "" {
+		return latest
+	}
+
+	data, err := os.ReadFile(r.snapshotFile)
+	if err != nil {
+		return latest
+	}
+
+	buf := bytes.NewBuffer(data)
+
+	var committedUpTo int32
+    if err := binary.Read(buf, binary.LittleEndian, &committedUpTo); err != nil {
+        return latest
+    }
+
+	var count int32
+	if err := binary.Read(buf, binary.LittleEndian, &count); err != nil {
+		return latest
+	}
+
+	for i := int32(0); i < count; i++ {
+		var cmd state.Command
+		cmd.Unmarshal(buf)
+		latest[int64(cmd.K)] = cmd
+	}
+
+	return latest
+}
+
+//append a log entry to stable storage
+func (r *Replica) recordInstanceMetadata(inst *Instance) {
+	if !r.Durable {
+		return
+	}
+
+	var b [5]byte
+	binary.LittleEndian.PutUint32(b[0:4], uint32(inst.ballot))
+	b[4] = byte(inst.status)
+	r.StableStore.Write(b[:])
+}
+
+//write a sequence of commands to stable storage
+func (r *Replica) recordCommands(cmds []state.Command) {
+	if !r.Durable {
+		return
+	}
+
+	if cmds == nil {
+		return
+	}
+	for i := 0; i < len(cmds); i++ {
+		cmds[i].Marshal(io.Writer(r.StableStore))
+	}
+}
+
+//sync with the stable store
+func (r *Replica) sync() {
+	if !r.Durable {
+		return
+	}
+
+	r.StableStore.Sync()
+}
+
+/* RPC to be called by master */
+
+func (r *Replica) BeTheLeader(args *genericsmrproto.BeTheLeaderArgs, reply *genericsmrproto.BeTheLeaderReply) error {
+	r.IsLeader = true
+	return nil
+}
+
+func (r *Replica) replyPrepare(replicaId int32, reply *paxosproto.PrepareReply) {
+	r.OutboundRPCs++
+	r.SendMsg(replicaId, r.prepareReplyRPC, reply)
+}
+
+func (r *Replica) replyAccept(replicaId int32, reply *paxosproto.AcceptReply) {
+	r.OutboundRPCs++
+	r.SendMsg(replicaId, r.acceptReplyRPC, reply)
+}
+
+/* ============= */
+/* Main event processing loop */
+
+func (r *Replica) batchClock(proposeDone *(chan bool)) {
+  for !r.Shutdown {
+    time.Sleep(time.Duration(r.epochlen) * time.Microsecond)
+    (*proposeDone) <- true
+  }
+}
+
+
+func (r *Replica) run(masterAddr string, masterPort int) {
+	r.ConnectToPeers()
+	if r.Id == 0 {
+		r.IsLeader = true
+	}
+	r.setupShards(masterAddr, masterPort)
+	log.Println("Waiting for client connections")
+
+	go r.WaitForClientConnections()
+
+	if r.snapshotEnabled {
+		go r.runSnapshotCompaction()
+	}
+
+	if r.Exec {
+		go r.executeCommands()
+	}
+
+	//slowClockChan := make(chan bool, 1)
+	//go r.SlowClock(slowClockChan)
+
+	//if r.Beacon {
+	//	go r.StopAdapting()
+	//}
+	proposeChan := r.ProposeChan
+	proposeDone := make(chan bool, 1)
+	if r.batchingEnabled {
+		log.Printf("batching neabledddddddddddddddddddddddddddddn\n")
+		proposeChan = nil
+		go r.batchClock(&proposeDone)
+	}
+
+	for !r.Shutdown {
+		select {
+		case <-proposeDone:
+			proposeChan = r.ProposeChan
+			break
+		case proposal := <-proposeChan:
+			r.InboundRPCs++
+			//got a Propose from a client
+			dlog.Printf("Received client proposal for clientId %d and commandId %d at time %f\n", proposal.ClientId, proposal.CommandId, time.Now().UnixNano())
+			r.handlePropose(proposal)
+			if r.batchingEnabled {
+				proposeChan = nil
+			}
+			break
+		case prepareS := <-r.prepareChan:
+			r.InboundRPCs++
+			prepare := prepareS.(*paxosproto.Prepare)
+			//got a Prepare message
+			dlog.Printf("Received Prepare from replica %d, for instance %d\n", prepare.LeaderId, prepare.Instance)
+			r.handlePrepare(prepare)
+			break
+
+		case acceptS := <-r.acceptChan:
+			r.InboundRPCs++
+			accept := acceptS.(*paxosproto.Accept)
+			//got an Accept message
+			dlog.Printf("Received Accept from replica %d, for instance %d\n", accept.LeaderId, accept.Instance)
+			r.handleAccept(accept)
+			break
+
+		case commitS := <-r.commitChan:
+			r.InboundRPCs++
+			commit := commitS.(*paxosproto.Commit)
+			//got a Commit message
+			dlog.Printf("Received Commit from replica %d, for instance %d\n", commit.LeaderId, commit.Instance)
+			r.handleCommit(commit)
+			break
+
+		case commitS := <-r.commitShortChan:
+			r.InboundRPCs++
+			commit := commitS.(*paxosproto.CommitShort)
+			//got a Commit message
+			dlog.Printf("Received Commit from replica %d, for instance %d\n", commit.LeaderId, commit.Instance)
+			r.handleCommitShort(commit)
+			break
+
+		case prepareReplyS := <-r.prepareReplyChan:
+			r.InboundRPCs++
+			prepareReply := prepareReplyS.(*paxosproto.PrepareReply)
+			//got a Prepare reply
+			dlog.Printf("Received PrepareReply for instance %d at time %f\n", prepareReply.Instance, time.Now().UnixNano())
+			r.handlePrepareReply(prepareReply)
+			break
+
+		case acceptReplyS := <-r.acceptReplyChan:
+			r.InboundRPCs++
+			acceptReply := acceptReplyS.(*paxosproto.AcceptReply)
+			//got an Accept reply
+			dlog.Printf("Received AcceptReply for instance %d at time %f\n", acceptReply.Instance, time.Now().UnixNano())
+			r.handleAcceptReply(acceptReply)
+			break
+
+		//case beacon := <-r.BeaconChan:
+		//	dlog.Printf("Received Beacon from replica %d with timestamp %d\n", beacon.Rid, beacon.Timestamp)
+		//	r.ReplyBeacon(beacon)
+		//	break
+
+		//case <-slowClockChan:
+		//	if r.Beacon {
+		//		for q := int32(0); q < int32(r.N); q++ {
+		//			if q == r.Id {
+		//				continue
+		//			}
+		//			r.SendBeacon(q)
+		//		}
+		//	}
+		//	break
+		//default:
+		//	break
+		}
+	}
+}
+
+func (r *Replica) setupShards(masterAddr string, masterPort int) {
+  if r.Id != 0 {
+    return
+  }
+  // Multi-paxos doesn't need intershard communication
+  var args masterproto.ShardReadyArgs
+  var reply masterproto.ShardReadyReply
+
+  done := false
+  for !done {
+    mcli, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", masterAddr, masterPort))
+    if err == nil {
+      err = mcli.Call("Master.ShardReady", &args, &reply)
+      if err == nil {
+        done = true
+        break
+      } else {
+        log.Printf("%v", err)
+      }
+    } else {
+      log.Printf("%v", err)
+    }
+  }
+}
+
+func (r *Replica) makeUniqueBallot(ballot int32) int32 {
+	return (ballot << 4) | r.Id
+}
+
+func (r *Replica) updateCommittedUpTo() {
+	for r.getInstance(r.committedUpTo+1) != nil &&
+		r.getInstance(r.committedUpTo+1).status == COMMITTED {
+		r.committedUpTo++
+	}
+}
+
+func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println("Prepare bcast failed:", err)
+		}
+	}()
+	ti := FALSE
+	if toInfinity {
+		ti = TRUE
+	}
+	args := &paxosproto.Prepare{r.Id, instance, ballot, ti}
+
+	n := r.N - 1
+	if r.Thrifty {
+		n = r.N >> 1
+	}
+	q := r.Id
+
+	for sent := 0; sent < n; {
+		q = (q + 1) % int32(r.N)
+		if q == r.Id {
+			break
+		}
+		if !r.Alive[q] {
+			continue
+		}
+		sent++
+		r.OutboundRPCs++
+		r.SendMsg(q, r.prepareRPC, args)
+	}
+}
+
+var pa paxosproto.Accept
+
+func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Command) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println("Accept bcast failed:", err)
+		}
+	}()
+	pa.LeaderId = r.Id
+	pa.Instance = instance
+	pa.Ballot = ballot
+	pa.Command = command
+	args := &pa
+	//args := &paxosproto.Accept{r.Id, instance, ballot, command}
+
+	n := r.N - 1
+	if r.Thrifty {
+		n = r.N >> 1
+	}
+
+	sent := 0
+	for q := 0; q < r.N-1; q++ {
+		if !r.Alive[r.PreferredPeerOrder[q]] {
+			continue
+		}
+		r.OutboundRPCs++
+		r.SendMsg(r.PreferredPeerOrder[q], r.acceptRPC, args)
+		sent++
+		if sent >= n {
+			break
+		}
+	}
+}
+
+var pc paxosproto.Commit
+var pcs paxosproto.CommitShort
+
+func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Command) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println("Commit bcast failed:", err)
+		}
+	}()
+	pc.LeaderId = r.Id
+	pc.Instance = instance
+	pc.Ballot = ballot
+	pc.Command = command
+	args := &pc
+	pcs.LeaderId = r.Id
+	pcs.Instance = instance
+	pcs.Ballot = ballot
+	pcs.Count = int32(len(command))
+	argsShort := &pcs
+
+	//args := &paxosproto.Commit{r.Id, instance, command}
+
+	n := r.N - 1
+	if r.Thrifty {
+		n = r.N >> 1
+	}
+	q := r.Id
+	sent := 0
+
+	for sent < n {
+		q = (q + 1) % int32(r.N)
+		if q == r.Id {
+			break
+		}
+		if !r.Alive[q] {
+			continue
+		}
+		sent++
+		r.OutboundRPCs++
+		r.SendMsg(q, r.commitShortRPC, argsShort)
+	}
+	if r.Thrifty && q != r.Id {
+		for sent < r.N-1 {
+			q = (q + 1) % int32(r.N)
+			if q == r.Id {
+				break
+			}
+			if !r.Alive[q] {
+				continue
+			}
+			sent++
+			r.OutboundRPCs++
+			r.SendMsg(q, r.commitRPC, args)
+		}
+	}
+}
+
+func (r *Replica) handlePropose(propose *genericsmr.Propose) {
+	propreply := &genericsmrproto.ProposeReplyTS{
+					TRUE,
+					propose.CommandId,
+					state.NIL,
+					propose.Timestamp,
+					propose.ClientId}
+	// dlog.Printf("Replying to client request after accept for clientId %d and commandId %d at timestamp %f\n", propreply.ClientId, propreply.CommandId, time.Now().UnixNano())
+	r.ReplyProposeTS(propreply, propose.Reply)
+	return
+
+
+	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)
+	if !r.IsLeader {
+		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL, 0, propose.ClientId}
+		r.ReplyProposeTS(preply, propose.Reply)
+		return
+	}
+
+	for r.crtInstance >= r.logOffset+int32(PREALLOCATED_INSTANCE_SPACE) {
+		// block for compaction to free up space
+		time.Sleep(COMPACTION_SLEEP_INTERVAL)
+		continue
+	}
+
+	for r.getInstance(r.crtInstance) != nil {
+		r.crtInstance++
+	}
+
+	instNo := r.crtInstance
+	r.crtInstance++
+
+	batchSize := 1
+	if r.batchingEnabled {
+		batchSize = len(r.ProposeChan) + 1
+	}
+
+	//if batchSize > MAX_BATCH {
+	//	batchSize = MAX_BATCH
+	//}
+
+	dlog.Printf("Batched %d\n", batchSize)
+
+	cmds := make([]state.Command, batchSize)
+	proposals := make([]*genericsmr.Propose, batchSize)
+	cmds[0] = propose.Command
+	proposals[0] = propose
+
+	for i := 1; i < batchSize; i++ {
+		prop := <-r.ProposeChan
+		cmds[i] = prop.Command
+		proposals[i] = prop
+	}
+
+	if r.defaultBallot == -1 {
+		r.setInstance(instNo, &Instance{
+			cmds,
+			r.makeUniqueBallot(0),
+			PREPARING,
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0}})
+		r.bcastPrepare(instNo, r.makeUniqueBallot(0), true)
+		//dlog.Printf("Classic round for instance %d\n", instNo)
+	} else {
+		r.setInstance(instNo, &Instance{
+			cmds,
+			r.defaultBallot,
+			PREPARED,
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0}})
+
+		r.recordInstanceMetadata(r.getInstance(instNo))
+		r.recordCommands(cmds)
+		r.sync()
+
+		r.bcastAccept(instNo, r.defaultBallot, cmds)
+		//dlog.Printf("Fast round for instance %d\n", instNo)
+	}
+}
+
+func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
+	inst := r.getInstance(prepare.Instance)
+	var preply *paxosproto.PrepareReply
+
+	if inst == nil {
+		ok := TRUE
+		if r.defaultBallot > prepare.Ballot {
+			ok = FALSE
+		}
+		preply = &paxosproto.PrepareReply{prepare.Instance, ok, r.defaultBallot, make([]state.Command, 0)}
+	} else {
+		ok := TRUE
+		if prepare.Ballot < inst.ballot {
+			ok = FALSE
+		}
+		preply = &paxosproto.PrepareReply{prepare.Instance, ok, inst.ballot, inst.cmds}
+	}
+
+	r.replyPrepare(prepare.LeaderId, preply)
+
+	if prepare.ToInfinity == TRUE && prepare.Ballot > r.defaultBallot {
+		r.defaultBallot = prepare.Ballot
+	}
+}
+
+func (r *Replica) handleAccept(accept *paxosproto.Accept) {
+	inst := r.getInstance(accept.Instance)
+	var areply *paxosproto.AcceptReply
+
+	if inst == nil {
+		if accept.Ballot < r.defaultBallot {
+			areply = &paxosproto.AcceptReply{accept.Instance, FALSE, r.defaultBallot}
+		} else {
+			r.setInstance(accept.Instance, &Instance{
+				accept.Command,
+				accept.Ballot,
+				ACCEPTED,
+				nil})
+			areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
+		}
+	} else if inst.ballot > accept.Ballot {
+		areply = &paxosproto.AcceptReply{accept.Instance, FALSE, inst.ballot}
+	} else if inst.ballot < accept.Ballot {
+		inst.cmds = accept.Command
+		inst.ballot = accept.Ballot
+		inst.status = ACCEPTED
+		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, inst.ballot}
+		if inst.lb != nil && inst.lb.clientProposals != nil {
+			//TODO: is this correct?
+			// try the proposal in a different instance
+			for i := 0; i < len(inst.lb.clientProposals); i++ {
+				r.ProposeChan <- inst.lb.clientProposals[i]
+			}
+			inst.lb.clientProposals = nil
+		}
+	} else {
+		// reordered ACCEPT
+		r.getInstance(accept.Instance).cmds = accept.Command
+		if r.getInstance(accept.Instance).status != COMMITTED {
+			r.getInstance(accept.Instance).status = ACCEPTED
+		}
+		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
+	}
+
+	if areply.OK == TRUE {
+		r.recordInstanceMetadata(r.getInstance(accept.Instance))
+		r.recordCommands(accept.Command)
+		r.sync()
+	}
+
+	r.replyAccept(accept.LeaderId, areply)
+}
+
+func (r *Replica) handleCommit(commit *paxosproto.Commit) {
+	inst := r.getInstance(commit.Instance)
+
+	//dlog.Printf("Committing instance %d\n", commit.Instance)
+
+	if inst == nil {
+		r.setInstance(commit.Instance, &Instance{
+			commit.Command,
+			commit.Ballot,
+			COMMITTED,
+			nil})
+	} else {
+		r.getInstance(commit.Instance).cmds = commit.Command
+		r.getInstance(commit.Instance).status = COMMITTED
+		r.getInstance(commit.Instance).ballot = commit.Ballot
+		if inst.lb != nil && inst.lb.clientProposals != nil {
+			for i := 0; i < len(inst.lb.clientProposals); i++ {
+				r.ProposeChan <- inst.lb.clientProposals[i]
+			}
+			inst.lb.clientProposals = nil
+		}
+	}
+
+	r.updateCommittedUpTo()
+
+	r.recordInstanceMetadata(r.getInstance(commit.Instance))
+	r.recordCommands(commit.Command)
+}
+
+func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
+	inst := r.getInstance(commit.Instance)
+
+	//dlog.Printf("Committing instance %d\n", commit.Instance)
+
+	if inst == nil {
+		r.setInstance(commit.Instance, &Instance{nil,
+			commit.Ballot,
+			COMMITTED,
+			nil})
+	} else {
+		r.getInstance(commit.Instance).status = COMMITTED
+		r.getInstance(commit.Instance).ballot = commit.Ballot
+		if inst.lb != nil && inst.lb.clientProposals != nil {
+			for i := 0; i < len(inst.lb.clientProposals); i++ {
+				r.ProposeChan <- inst.lb.clientProposals[i]
+			}
+			inst.lb.clientProposals = nil
+		}
+	}
+
+	r.updateCommittedUpTo()
+
+	r.recordInstanceMetadata(r.getInstance(commit.Instance))
+}
+
+func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
+	inst := r.getInstance(preply.Instance)
+	if inst == nil {
+		return
+	}
+
+	if inst.status != PREPARING {
+		// TODO: should replies for non-current ballots be ignored?
+		// we've moved on -- these are delayed replies, so just ignore
+		return
+	}
+
+	if preply.OK == TRUE {
+		inst.lb.prepareOKs++
+
+		if preply.Ballot > inst.lb.maxRecvBallot {
+			inst.cmds = preply.Command
+			inst.lb.maxRecvBallot = preply.Ballot
+			if inst.lb.clientProposals != nil {
+				// there is already a competing command for this instance,
+				// so we put the client proposal back in the queue so that
+				// we know to try it in another instance
+				for i := 0; i < len(inst.lb.clientProposals); i++ {
+					r.ProposeChan <- inst.lb.clientProposals[i]
+				}
+				inst.lb.clientProposals = nil
+			}
+		}
+
+		if inst.lb.prepareOKs+1 > r.N>>1 {
+			inst.status = PREPARED
+			inst.lb.nacks = 0
+			if inst.ballot > r.defaultBallot {
+				r.defaultBallot = inst.ballot
+			}
+			r.recordInstanceMetadata(r.getInstance(preply.Instance))
+			r.sync()
+			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds)
+		}
+	} else {
+		// TODO: there is probably another active leader
+		inst.lb.nacks++
+		if preply.Ballot > inst.lb.maxRecvBallot {
+			inst.lb.maxRecvBallot = preply.Ballot
+		}
+		if inst.lb.nacks >= r.N>>1 {
+			if inst.lb.clientProposals != nil {
+				// try the proposals in another instance
+				for i := 0; i < len(inst.lb.clientProposals); i++ {
+					r.ProposeChan <- inst.lb.clientProposals[i]
+				}
+				inst.lb.clientProposals = nil
+			}
+		}
+	}
+}
+
+func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
+	inst := r.getInstance(areply.Instance)
+	if inst == nil {
+		return
+	}
+
+	if inst.status != PREPARED && inst.status != ACCEPTED {
+		// we've move on, these are delayed replies, so just ignore
+		return
+	}
+
+	if areply.OK == TRUE {
+		inst.lb.acceptOKs++
+		if inst.lb.acceptOKs+1 > r.N>>1 {
+			inst = r.getInstance(areply.Instance)
+			inst.status = COMMITTED
+			if inst.lb.clientProposals != nil {
+				// give client the all clear
+				for i := 0; i < len(inst.cmds); i++ {
+					if !r.NeedsWaitForExecute(&inst.cmds[i]) {
+						propreply := &genericsmrproto.ProposeReplyTS{
+							TRUE,
+							inst.lb.clientProposals[i].CommandId,
+							state.NIL,
+							inst.lb.clientProposals[i].Timestamp,
+							inst.lb.clientProposals[i].ClientId}
+						dlog.Printf("Replying to client request after accept for clientId %d and commandId %d at timestamp %f\n", propreply.ClientId, propreply.CommandId, time.Now().UnixNano())
+						r.ReplyProposeTS(propreply, inst.lb.clientProposals[i].Reply)
+					}
+				}
+			}
+
+			r.recordInstanceMetadata(r.getInstance(areply.Instance))
+			r.sync() //is this necessary?
+
+			r.updateCommittedUpTo()
+
+			r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
+		}
+	} else {
+		// TODO: there is probably another active leader
+		inst.lb.nacks++
+		if areply.Ballot > inst.lb.maxRecvBallot {
+			inst.lb.maxRecvBallot = areply.Ballot
+		}
+		if inst.lb.nacks >= r.N>>1 {
+			// TODO
+		}
+	}
+}
+
+func (r *Replica) executeCommands() {
+	i := int32(r.logOffset)
+	for !r.Shutdown {
+		executed := false
+
+		for i <= r.committedUpTo {
+			inst := r.getInstance(i)
+			if inst == nil {
+				break
+			}
+
+			if inst.cmds != nil {
+				inst := r.getInstance(i)
+				for j := 0; j < len(inst.cmds); j++ {
+					val := inst.cmds[j].Execute(r.State)
+					if r.NeedsWaitForExecute(&inst.cmds[j]) && inst.lb != nil && inst.lb.clientProposals != nil {
+						propreply := &genericsmrproto.ProposeReplyTS{
+							TRUE,
+							inst.lb.clientProposals[j].CommandId,
+							val,
+							inst.lb.clientProposals[j].Timestamp,
+							inst.lb.clientProposals[j].ClientId}
+						dlog.Printf("Replying to client request after execute for clientId %d and commandId %d at timestamp %f\n", propreply.ClientId, propreply.CommandId, time.Now().UnixNano())
+						r.ReplyProposeTS(propreply, inst.lb.clientProposals[j].Reply)
+					}
+				}
+				i++
+				executed = true
+			} else {
+				break
+			}
+		}
+
+		if !executed {
+			time.Sleep(1000 * 1000)
+		}
+	}
+
+}

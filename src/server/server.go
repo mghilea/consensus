@@ -3,7 +3,7 @@ package main
 import (
 	"abd"
 	"dlog"
-	"epaxos"
+	"dpaxos"
 	"flag"
 	"fmt"
 	"gpaxos"
@@ -136,8 +136,10 @@ func main() {
 			*durable, *statsFile)
 	} else if *doEpaxos {
 		log.Println("Starting Egalitarian Paxos replica...")
-		rep = epaxos.NewReplica(*shardIdx, replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
-			*beacon, *durable, *statsFile, *noConflicts, *snapshotEnabled, *snapshotFile, *maxInstanceSpaceSize)
+		// rep = dpaxos.NewReplica(*shardIdx, replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
+		// 	*beacon, *durable, *statsFile, *noConflicts, *snapshotEnabled, *snapshotFile, *maxInstanceSpaceSize)
+		rep = dpaxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
+			*beacon, *durable, *statsFile, *doBatch, *epochLength, *snapshotEnabled, *snapshotFile, *maxInstanceSpaceSize)
 	} else if *doMencius {
 		log.Println("Starting Mencius replica...")
 		rep = mencius.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
