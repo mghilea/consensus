@@ -207,7 +207,7 @@ func createClientWithID(uniqueID int32, replyChan chan fastrpc.Serializable) *cl
 	switch *replProtocol {
 	case "epaxos":
 		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, true, replyChan)
+			*statsFile, false, false, replyChan)
 	default:
 		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, false, replyChan)
