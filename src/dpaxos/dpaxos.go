@@ -18,6 +18,7 @@ import (
   "masterproto"
   "bloomfilter"
   "sync"
+  "math"
 )
 
 const MAX_DEPTH_DEP = 10
@@ -189,9 +190,25 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		maxInstanceSpaceSize,
 	}
 
-	// log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
 	r.Beacon = beacon
 	r.Durable = durable
+
+	for i := 0; i < r.N; i++ {
+		r.InstanceSpace[i] = make([]*Instance, PREALLOCATED_INSTANCE_SPACE)
+		r.crtInstance[i] = 0
+		r.ExecedUpTo[i] = -1
+		r.conflicts1[i] = make(map[state.Key]map[state.Operation]int32, HT_INIT_SIZE)
+		r.conflicts[i] = make(map[state.Key]int32, HT_INIT_SIZE)
+		r.logOffset[i] = 0
+	}
+
+	for bf_PT = 1; math.Pow(2, float64(bf_PT))/float64(MAX_BATCH) < BF_M_N; {
+		bf_PT++
+	}
+
+	r.exec = &Exec{r}
+
+	cpMarker = make([]state.Command, 0)
 
 	r.prepareRPC = r.RegisterRPC(new(paxosproto.Prepare), r.prepareChan)
 	r.acceptRPC = r.RegisterRPC(new(paxosproto.Accept), r.acceptChan)
@@ -199,6 +216,18 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 	r.commitShortRPC = r.RegisterRPC(new(paxosproto.CommitShort), r.commitShortChan)
 	r.prepareReplyRPC = r.RegisterRPC(new(paxosproto.PrepareReply), r.prepareReplyChan)
 	r.acceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.acceptReplyChan)
+
+	r.prepareRPC = r.RegisterRPC(new(paxosproto.Prepare), r.prepareChan)
+	r.prepareReplyRPC = r.RegisterRPC(new(paxosproto.PrepareReply), r.prepareReplyChan)
+	r.preAcceptRPC = r.RegisterRPC(new(paxosproto.Accept), r.preAcceptChan)
+	r.preAcceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.preAcceptReplyChan)
+	r.preAcceptOKRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.preAcceptOKChan)
+	r.acceptRPC = r.RegisterRPC(new(paxosproto.Accept), r.acceptChan)
+	r.acceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.acceptReplyChan)
+	r.commitRPC = r.RegisterRPC(new(paxosproto.Commit), r.commitChan)
+	r.commitShortRPC = r.RegisterRPC(new(paxosproto.CommitShort), r.commitShortChan)
+	r.tryPreAcceptRPC = r.RegisterRPC(new(paxosproto.Accept), r.tryPreAcceptChan)
+	r.tryPreAcceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.tryPreAcceptReplyChan)
 
 	go r.run(masterAddr, masterPort)
 
@@ -408,6 +437,7 @@ func (r *Replica) replyAccept(replicaId int32, reply *paxosproto.AcceptReply) {
 //   }
 // }
 
+var conflicted, weird, slow, happy int
 
 func (r *Replica) run(masterAddr string, masterPort int) {
 	r.ConnectToPeers()
@@ -433,93 +463,146 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	//if r.Beacon {
 	//	go r.StopAdapting()
 	//}
-	proposeChan := r.ProposeChan
-	proposeDone := make(chan bool, 1)
+	// proposeChan := r.ProposeChan
+	// proposeDone := make(chan bool, 1)
 	// if r.batchingEnabled {
 	// 	log.Printf("batching neabledddddddddddddddddddddddddddddn\n")
 	// 	proposeChan = nil
 	// 	go r.batchClock(&proposeDone)
 	// }
 
+	// slowClockChan := make(chan bool, 1)
+	// fastClockChan := make(chan bool, 1)
+	onOffProposeChan := r.ProposeChan
+
 	for !r.Shutdown {
 		select {
-		case <-proposeDone:
-			proposeChan = r.ProposeChan
-			break
-		case proposal := <-proposeChan:
-			r.InboundRPCs++
+
+		case propose := <-onOffProposeChan:
 			//got a Propose from a client
-			dlog.Printf("Received client proposal for clientId %d and commandId %d at time %f\n", proposal.ClientId, proposal.CommandId, time.Now().UnixNano())
-			r.handlePropose(proposal)
-			// if r.batchingEnabled {
-			// 	proposeChan = nil
+			dlog.Printf("Proposal with op %d for key %d at time %f\n", propose.Command.Op, propose.Command.K, time.Now().UnixNano())
+			r.InboundRPCs++
+			r.handlePropose(propose)
+			//deactivate new proposals channel to prioritize the handling of other protocol messages,
+			//and to allow commands to accumulate for batching
+			// if MAX_BATCH > 100 {
+			// 	onOffProposeChan = nil
 			// }
 			break
+
+		// case <-fastClockChan:
+		// 	//activate new proposals channel
+		// 	onOffProposeChan = r.ProposeChan
+		// 	break
+
 		case prepareS := <-r.prepareChan:
-			r.InboundRPCs++
 			prepare := prepareS.(*paxosproto.Prepare)
 			//got a Prepare message
-			dlog.Printf("Received Prepare from replica %d, for instance %d\n", prepare.LeaderId, prepare.Instance)
+			r.InboundRPCs++
+			dlog.Printf("Received Prepare for instance %d.%d at time %f\n", prepare.LeaderId, prepare.Instance, time.Now().UnixNano())
 			// r.handlePrepare(prepare)
 			break
 
+		// case preAcceptS := <-r.preAcceptChan:
+		// 	preAccept := preAcceptS.(*paxosproto.Accept)
+		// 	//got a PreAccept message
+		// 	r.InboundRPCs++
+		// 	dlog.Printf("Received PreAccept for instance %d.%d at time %f\n", preAccept.LeaderId, preAccept.Instance, time.Now().UnixNano())
+		// 	// r.handlePreAccept(preAccept)
+		// 	break
+
 		case acceptS := <-r.acceptChan:
-			r.InboundRPCs++
 			accept := acceptS.(*paxosproto.Accept)
 			//got an Accept message
-			dlog.Printf("Received Accept from replica %d, for instance %d\n", accept.LeaderId, accept.Instance)
+			r.InboundRPCs++
+			dlog.Printf("Received Accept for instance %d.%d at time %f\n", accept.LeaderId, accept.Instance, time.Now().UnixNano())
 			// r.handleAccept(accept)
 			break
 
 		case commitS := <-r.commitChan:
-			r.InboundRPCs++
 			commit := commitS.(*paxosproto.Commit)
 			//got a Commit message
-			dlog.Printf("Received Commit from replica %d, for instance %d\n", commit.LeaderId, commit.Instance)
+			r.InboundRPCs++
+			dlog.Printf("Received Commit for instance %d.%dv at time %f\n", commit.LeaderId, commit.Instance, time.Now().UnixNano())
 			// r.handleCommit(commit)
 			break
 
 		case commitS := <-r.commitShortChan:
-			r.InboundRPCs++
 			commit := commitS.(*paxosproto.CommitShort)
 			//got a Commit message
-			dlog.Printf("Received Commit from replica %d, for instance %d\n", commit.LeaderId, commit.Instance)
+			r.InboundRPCs++
+			dlog.Printf("Received Commit for instance %d.%d at time %f\n", commit.LeaderId, commit.Instance, time.Now().UnixNano())
 			// r.handleCommitShort(commit)
 			break
 
 		case prepareReplyS := <-r.prepareReplyChan:
-			r.InboundRPCs++
 			prepareReply := prepareReplyS.(*paxosproto.PrepareReply)
 			//got a Prepare reply
+			r.InboundRPCs++
 			dlog.Printf("Received PrepareReply for instance %d at time %f\n", prepareReply.Instance, time.Now().UnixNano())
 			// r.handlePrepareReply(prepareReply)
 			break
 
+		// case preAcceptReplyS := <-r.preAcceptReplyChan:
+		// 	preAcceptReply := preAcceptReplyS.(*paxosproto.AcceptReply)
+		// 	//got a PreAccept reply
+		// 	r.InboundRPCs++
+		// 	dlog.Printf("Received PreAcceptReply for instance %d at time %f\n", preAcceptReply.Instance, time.Now().UnixNano())
+		// 	// r.handlePreAcceptReply(preAcceptReply)
+		// 	break
+
+		// case preAcceptOKS := <-r.preAcceptOKChan:
+		// 	preAcceptOK := preAcceptOKS.(*paxosproto.AcceptReply)
+		// 	//got a PreAccept reply
+		// 	r.InboundRPCs++
+		// 	dlog.Printf("Received PreAcceptOK for instance %d.%d at time %f\n", r.Id, preAcceptOK.Instance, time.Now().UnixNano())
+		// 	// r.handlePreAcceptOK(preAcceptOK)
+		// 	break
+
 		case acceptReplyS := <-r.acceptReplyChan:
-			r.InboundRPCs++
 			acceptReply := acceptReplyS.(*paxosproto.AcceptReply)
 			//got an Accept reply
+			r.InboundRPCs++
 			dlog.Printf("Received AcceptReply for instance %d at time %f\n", acceptReply.Instance, time.Now().UnixNano())
 			// r.handleAcceptReply(acceptReply)
 			break
 
-		//case beacon := <-r.BeaconChan:
-		//	dlog.Printf("Received Beacon from replica %d with timestamp %d\n", beacon.Rid, beacon.Timestamp)
-		//	r.ReplyBeacon(beacon)
-		//	break
+		// case tryPreAcceptS := <-r.tryPreAcceptChan:
+		// 	tryPreAccept := tryPreAcceptS.(*paxosproto.Accept)
+		// 	r.InboundRPCs++
+		// 	dlog.Printf("Received TryPreAccept for instance %d.%d at time %f\n", tryPreAccept.LeaderId, tryPreAccept.Instance, time.Now().UnixNano())
+		// 	// r.handleTryPreAccept(tryPreAccept)
+		// 	break
 
-		//case <-slowClockChan:
-		//	if r.Beacon {
-		//		for q := int32(0); q < int32(r.N); q++ {
-		//			if q == r.Id {
-		//				continue
-		//			}
-		//			r.SendBeacon(q)
-		//		}
-		//	}
-		//	break
-		//default:
-		//	break
+		// case tryPreAcceptReplyS := <-r.tryPreAcceptReplyChan:
+		// 	tryPreAcceptReply := tryPreAcceptReplyS.(*paxosproto.AcceptReply)
+		// 	r.InboundRPCs++
+		// 	dlog.Printf("Received TryPreAcceptReply for instance %d at time %f\n", tryPreAcceptReply.Instance, time.Now().UnixNano())
+		// 	// r.handleTryPreAcceptReply(tryPreAcceptReply)
+		// 	break
+
+		// case beacon := <-r.BeaconChan:
+		// 	dlog.Printf("Received Beacon from replica %d with timestamp %d\n", beacon.Rid, beacon.Timestamp)
+		// 	// r.ReplyBeacon(beacon)
+		// 	break
+
+		// case <-slowClockChan:
+		// 	if r.Beacon {
+		// 		for q := int32(0); q < int32(r.N); q++ {
+		// 			if q == r.Id {
+		// 				continue
+		// 			}
+		// 			r.SendBeacon(q)
+		// 		}
+		// 	}
+		// 	break
+		// case <-r.OnClientConnect:
+		// 	log.Printf("weird %d; conflicted %d; slow %d; happy %d\n", weird, conflicted, slow, happy)
+		// 	weird, conflicted, slow, happy = 0, 0, 0, 0
+
+		// case iid := <-r.instancesToRecover:
+		// 	log.Printf("start recovery for instance %d\n", iid.replica)
+		// 	// r.startRecoveryForInstance(iid.replica, iid.instance)
 		}
 	}
 }
