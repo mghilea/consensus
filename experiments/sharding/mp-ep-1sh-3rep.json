@@ -4,7 +4,7 @@
 	  ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol":[
-	  "multi_paxos", "epaxos"
+	  "multi_paxos", "xpaxos"
   ],
   "replication_protocol_settings": [
     {
@@ -59,12 +59,12 @@
       }
   },
  "client_total": [
-    [25],
-    [25]
+    [20],
+    [20]
   ],
   "client_processes_per_client_node": [
-    [25],
-    [25]
+    [20],
+    [20]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,

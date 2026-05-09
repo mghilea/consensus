@@ -20,6 +20,7 @@ import (
 	"runtime/pprof"
 	"serverlib"
 	"syscall"
+	"xpaxos"
 )
 
 var debug *bool = flag.Bool("debug", false, "Enable debug logging.")
@@ -33,6 +34,7 @@ var doAbd *bool = flag.Bool("a", false, "Use ABD as the replication protocol. De
 var doMencius *bool = flag.Bool("m", false, "Use Mencius as the replication protocol. Defaults to false.")
 var doGpaxos *bool = flag.Bool("g", false, "Use Generalized Paxos as the replication protocol. Defaults to false.")
 var doEpaxos *bool = flag.Bool("e", false, "Use EPaxos as the replication protocol. Defaults to false.")
+var doXpaxos *bool = flag.Bool("x", false, "Use Extended Paxos as the replication protocol. Defaults to false.")
 var procs *int = flag.Int("p", 8, "GOMAXPROCS. Defaults to 2")
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 var blockprofile = flag.String("blockprofile", "", "write block profile to file")
@@ -138,6 +140,10 @@ func main() {
 		log.Println("Starting Egalitarian Paxos replica...")
 		rep = epaxos.NewReplica(*shardIdx, replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
 			*beacon, *durable, *statsFile, *noConflicts, *snapshotEnabled, *snapshotFile, *maxInstanceSpaceSize)
+	} else if *doXpaxos {
+		log.Println("Starting Extended Paxos replica...")
+		rep = xpaxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
+			*beacon, *durable, *statsFile, *doBatch, *epochLength, *snapshotEnabled, *snapshotFile, *maxInstanceSpaceSize)
 	} else if *doMencius {
 		log.Println("Starting Mencius replica...")
 		rep = mencius.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
