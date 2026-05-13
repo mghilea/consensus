@@ -35,12 +35,22 @@ type Replica struct {
 	commitShortChan     chan fastrpc.Serializable
 	prepareReplyChan    chan fastrpc.Serializable
 	acceptReplyChan     chan fastrpc.Serializable
+	preAcceptChan       chan fastrpc.Serializable
+	preAcceptReplyChan  chan fastrpc.Serializable
+	preAcceptOKChan     chan fastrpc.Serializable
+	tryPreAcceptChan    chan fastrpc.Serializable
+	tryPreAcceptReplyChan   chan fastrpc.Serializable
 	prepareRPC          uint8
 	acceptRPC           uint8
 	commitRPC           uint8
 	commitShortRPC      uint8
 	prepareReplyRPC     uint8
 	acceptReplyRPC      uint8
+	preAcceptRPC        uint8
+	preAcceptReplyRPC   uint8
+	preAcceptOKRPC      uint8
+	tryPreAcceptRPC     uint8
+	tryPreAcceptReplyRPC   uint8
 	IsLeader            bool        // does this replica think it is the leader
 	instanceSpace       []*Instance // the space of all instances (used and not yet used)
 	crtInstance         int32       // highest active instance number that this replica knows about
@@ -57,6 +67,12 @@ type Replica struct {
 	snapshotEnabled     bool
 	snapshotFile        string
 	maxInstanceSpaceSize int
+    instancesToRecover  chan *instanceId
+}
+
+type instanceId struct {
+	replica  int32
+	instance int32
 }
 
 type InstanceStatus int
@@ -81,6 +97,12 @@ type LeaderBookkeeping struct {
 	prepareOKs      int
 	acceptOKs       int
 	nacks           int
+	recoveryInst    *RecoveryInstance
+}
+
+type RecoveryInstance struct {
+	cmds            []state.Command
+	status          InstanceStatus
 }
 
 func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool, exec bool, dreply bool, 
@@ -93,7 +115,12 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, 3*genericsmr.CHAN_BUFFER_SIZE),
-		0, 0, 0, 0, 0, 0,
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		false,
 		make([]*Instance, PREALLOCATED_INSTANCE_SPACE),
 		0,
@@ -109,7 +136,9 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		0,
 		snapshotEnabled,
 		snapshotFile,
-		maxInstanceSpaceSize}
+		maxInstanceSpaceSize,
+		make(chan *instanceId, genericsmr.CHAN_BUFFER_SIZE),
+	}
 
 
 	log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
@@ -122,6 +151,14 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 	r.commitShortRPC = r.RegisterRPC(new(paxosproto.CommitShort), r.commitShortChan)
 	r.prepareReplyRPC = r.RegisterRPC(new(paxosproto.PrepareReply), r.prepareReplyChan)
 	r.acceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.acceptReplyChan)
+	
+	// Added channels from EPaxos
+	r.preAcceptRPC = r.RegisterRPC(new(paxosproto.Accept), r.preAcceptChan)
+	r.preAcceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.preAcceptReplyChan)
+	r.preAcceptOKRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.preAcceptOKChan)
+	r.tryPreAcceptRPC = r.RegisterRPC(new(paxosproto.Accept), r.tryPreAcceptChan)
+	r.tryPreAcceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.tryPreAcceptReplyChan)
+
 	go r.run(masterAddr, masterPort)
 
 	return r
@@ -349,12 +386,12 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		go r.executeCommands()
 	}
 
-	//slowClockChan := make(chan bool, 1)
-	//go r.SlowClock(slowClockChan)
+	slowClockChan := make(chan bool, 1)
+	go r.SlowClock(slowClockChan)
 
-	//if r.Beacon {
-	//	go r.StopAdapting()
-	//}
+	if r.Beacon {
+		go r.StopAdapting()
+	}
 	proposeChan := r.ProposeChan
 	proposeDone := make(chan bool, 1)
 	if r.batchingEnabled {
@@ -424,22 +461,60 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			dlog.Printf("Received AcceptReply for instance %d\n", acceptReply.Instance)
 			r.handleAcceptReply(acceptReply)
 			break
+		
+		case preAcceptS := <-r.preAcceptChan:
+			preAccept := preAcceptS.(*paxosproto.Accept)
+			//got a PreAccept message
+			r.InboundRPCs++
+			dlog.Printf("Received PreAccept for instance %d\n", preAccept.Instance)
+			// r.handlePreAccept(preAccept)
+			break
 
-		//case beacon := <-r.BeaconChan:
-		//	dlog.Printf("Received Beacon from replica %d with timestamp %d\n", beacon.Rid, beacon.Timestamp)
-		//	r.ReplyBeacon(beacon)
-		//	break
+		case preAcceptReplyS := <-r.preAcceptReplyChan:
+			preAcceptReply := preAcceptReplyS.(*paxosproto.AcceptReply)
+			//got a PreAccept reply
+			r.InboundRPCs++
+			dlog.Printf("Received PreAcceptReply for instance %d\n", preAcceptReply.Instance)
+			// r.handlePreAcceptReply(preAcceptReply)
+			break
 
-		//case <-slowClockChan:
-		//	if r.Beacon {
-		//		for q := int32(0); q < int32(r.N); q++ {
-		//			if q == r.Id {
-		//				continue
-		//			}
-		//			r.SendBeacon(q)
-		//		}
-		//	}
-		//	break
+		case preAcceptOKS := <-r.preAcceptOKChan:
+			preAcceptOK := preAcceptOKS.(*paxosproto.AcceptReply)
+			//got a PreAccept reply
+			r.InboundRPCs++
+			dlog.Printf("Received PreAcceptOK for instance %d\n", preAcceptOK.Instance)
+			// r.handlePreAcceptOK(preAcceptOK)
+			break
+
+		case tryPreAcceptS := <-r.tryPreAcceptChan:
+			tryPreAccept := tryPreAcceptS.(*paxosproto.Accept)
+			r.InboundRPCs++
+			dlog.Printf("Received TryPreAccept for instance %d\n", tryPreAccept.Instance)
+			// r.handleTryPreAccept(tryPreAccept)
+			break
+
+		case tryPreAcceptReplyS := <-r.tryPreAcceptReplyChan:
+			tryPreAcceptReply := tryPreAcceptReplyS.(*paxosproto.AcceptReply)
+			r.InboundRPCs++
+			dlog.Printf("Received TryPreAcceptReply for instance %d\n", tryPreAcceptReply.Instance)
+			// r.handleTryPreAcceptReply(tryPreAcceptReply)
+			break
+
+		case beacon := <-r.BeaconChan:
+			dlog.Printf("Received Beacon from replica %d with timestamp %d\n", beacon.Rid, beacon.Timestamp)
+			r.ReplyBeacon(beacon)
+			break
+
+		case <-slowClockChan:
+			if r.Beacon {
+				for q := int32(0); q < int32(r.N); q++ {
+					if q == r.Id {
+						continue
+					}
+					r.SendBeacon(q)
+				}
+			}
+			break
 		//default:
 		//	break
 		}
@@ -473,6 +548,10 @@ func (r *Replica) setupShards(masterAddr string, masterPort int) {
 
 func (r *Replica) makeUniqueBallot(ballot int32) int32 {
 	return (ballot << 4) | r.Id
+}
+
+func (r *Replica) makeBallotLargerThan(ballot int32) int32 {
+	return r.makeUniqueBallot((ballot >> 4) + 1)
 }
 
 func (r *Replica) updateCommittedUpTo() {
@@ -606,7 +685,15 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 }
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
-
+	// Reply to client directly
+	propreply := &genericsmrproto.ProposeReplyTS{
+					TRUE,
+					propose.CommandId,
+					state.NIL,
+					propose.Timestamp,
+					propose.ClientId}
+	r.ReplyProposeTS(propreply, propose.Reply)
+	return
 
 	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)
 	if !r.IsLeader {
@@ -655,7 +742,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 			cmds,
 			r.makeUniqueBallot(0),
 			PREPARING,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0}})
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0, nil}})
 		r.bcastPrepare(instNo, r.makeUniqueBallot(0), true)
 		//dlog.Printf("Classic round for instance %d\n", instNo)
 	} else {
@@ -663,7 +750,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 			cmds,
 			r.defaultBallot,
 			PREPARED,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0}})
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0, nil}})
 
 		r.recordInstanceMetadata(r.getInstance(instNo))
 		r.recordCommands(cmds)
@@ -948,4 +1035,38 @@ func (r *Replica) executeCommands() {
 		}
 	}
 
+}
+
+/**********************************************************************
+
+                      RECOVERY ACTIONS
+
+***********************************************************************/
+
+func (r *Replica) startRecoveryForInstance(instance int32) {
+	log.Fatal("Recovery for instance not implemented.")
+
+	if r.getInstance(instance) == nil {
+		r.setInstance(instance, nil)
+	}
+
+	inst := r.getInstance(instance)
+	if inst.lb == nil {
+		inst.lb = &LeaderBookkeeping{inst.lb.clientProposals, 0, 0, 0, 0, nil}
+
+	} else {
+		inst.lb = &LeaderBookkeeping{inst.lb.clientProposals, 0, 0, 0, 0, nil}
+	}
+
+	if inst.status == ACCEPTED {
+		inst.lb.recoveryInst = &RecoveryInstance{inst.cmds, inst.status}
+		inst.lb.maxRecvBallot = inst.ballot
+	} else if inst.status == PREPARED {
+		inst.lb.recoveryInst = &RecoveryInstance{inst.cmds, inst.status}
+	}
+
+	//compute larger ballot
+	inst.ballot = r.makeBallotLargerThan(inst.ballot)
+
+	r.bcastPrepare(instance, inst.ballot, true)
 }

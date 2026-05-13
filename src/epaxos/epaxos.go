@@ -35,7 +35,7 @@ const BF_M_N = 32.0
 
 var bf_PT uint32
 
-const DO_CHECKPOINTING = true
+const DO_CHECKPOINTING = false
 const HT_INIT_SIZE = 200000
 const CHECKPOINT_PERIOD = 10000
 
@@ -613,9 +613,9 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 				}
 			}
 			break
-		case <-r.OnClientConnect:
-			log.Printf("weird %d; conflicted %d; slow %d; happy %d\n", weird, conflicted, slow, happy)
-			weird, conflicted, slow, happy = 0, 0, 0, 0
+		// case <-r.OnClientConnect:
+		// 	log.Printf("weird %d; conflicted %d; slow %d; happy %d\n", weird, conflicted, slow, happy)
+		// 	weird, conflicted, slow, happy = 0, 0, 0, 0
 
 		case iid := <-r.instancesToRecover:
 			r.startRecoveryForInstance(iid.replica, iid.instance)
@@ -1115,6 +1115,16 @@ func bfFromCommands(cmds []state.Command) *bloomfilter.Bloomfilter {
 ***********************************************************************/
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
+	// Reply to client directly
+	propreply := &genericsmrproto.ProposeReplyTS{
+					TRUE,
+					propose.CommandId,
+					state.NIL,
+					propose.Timestamp,
+					propose.ClientId}
+	r.ReplyProposeTS(propreply, propose.Reply)
+	return
+
 	//TODO!! Handle client retries
 
 	batchSize := len(r.ProposeChan) + 1

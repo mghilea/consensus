@@ -285,7 +285,16 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 			} else {
 				opTypes[j] = state.CAS
 			}
-			keys[j] = int64(c.zipf.Uint64())
+
+			if *conflicts >= 0 {
+				if c.r.Intn(*conflictsDenom) < *conflicts {
+					keys[j] = 0
+				} else {
+					keys[j] = (int64(c.opCount) << 32) | int64(c.id)
+				}
+			} else {
+				keys[j] = int64(c.zipf.Uint64())
+			}
 		}
 
 		c.replica = c.client.GetReplicaFromKey(state.Key(keys[0]))
@@ -342,7 +351,16 @@ func clientWorker(threadId int32, startIdx int, clientPoolSize int, stop <-chan 
 				} else {
 					opTypes[j] = state.CAS
 				}
-				keys[j] = int64(c.zipf.Uint64())
+				
+				if *conflicts >= 0 {
+					if c.r.Intn(*conflictsDenom) < *conflicts {
+						keys[j] = 0
+					} else {
+						keys[j] = (int64(c.opCount) << 32) | int64(c.id)
+					}
+				} else {
+					keys[j] = int64(c.zipf.Uint64())
+				}
 			}
 
 			c.replica = c.client.GetReplicaFromKey(state.Key(keys[0]))

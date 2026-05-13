@@ -57,6 +57,12 @@ type Replica struct {
 	snapshotEnabled     bool
 	snapshotFile        string
 	maxInstanceSpaceSize int
+	instancesToRecover  chan *instanceId
+}
+
+type instanceId struct {
+	replica  int32
+	instance int32
 }
 
 type InstanceStatus int
@@ -81,6 +87,12 @@ type LeaderBookkeeping struct {
 	prepareOKs      int
 	acceptOKs       int
 	nacks           int
+	recoveryInst    *RecoveryInstance
+}
+
+type RecoveryInstance struct {
+	cmds            []state.Command
+	status          InstanceStatus
 }
 
 func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool, exec bool, dreply bool, 
@@ -109,7 +121,9 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		0,
 		snapshotEnabled,
 		snapshotFile,
-		maxInstanceSpaceSize}
+		maxInstanceSpaceSize,
+		make(chan *instanceId, genericsmr.CHAN_BUFFER_SIZE),
+	}
 
 
 	log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
@@ -349,12 +363,12 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		go r.executeCommands()
 	}
 
-	//slowClockChan := make(chan bool, 1)
-	//go r.SlowClock(slowClockChan)
+	slowClockChan := make(chan bool, 1)
+	go r.SlowClock(slowClockChan)
 
-	//if r.Beacon {
-	//	go r.StopAdapting()
-	//}
+	if r.Beacon {
+		go r.StopAdapting()
+	}
 	proposeChan := r.ProposeChan
 	proposeDone := make(chan bool, 1)
 	if r.batchingEnabled {
@@ -425,24 +439,28 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			r.handleAcceptReply(acceptReply)
 			break
 
-		//case beacon := <-r.BeaconChan:
-		//	dlog.Printf("Received Beacon from replica %d with timestamp %d\n", beacon.Rid, beacon.Timestamp)
-		//	r.ReplyBeacon(beacon)
-		//	break
+		case beacon := <-r.BeaconChan:
+			dlog.Printf("Received Beacon from replica %d with timestamp %d\n", beacon.Rid, beacon.Timestamp)
+			r.ReplyBeacon(beacon)
+			break
 
-		//case <-slowClockChan:
-		//	if r.Beacon {
-		//		for q := int32(0); q < int32(r.N); q++ {
-		//			if q == r.Id {
-		//				continue
-		//			}
-		//			r.SendBeacon(q)
-		//		}
-		//	}
-		//	break
-		//default:
-		//	break
+		case <-slowClockChan:
+			if r.Beacon {
+				for q := int32(0); q < int32(r.N); q++ {
+					if q == r.Id {
+						continue
+					}
+					r.SendBeacon(q)
+				}
+			}
+			break
+
+		case iid := <-r.instancesToRecover:
+			r.startRecoveryForInstance(iid.instance)
 		}
+		// default:
+		// 	break
+		// }
 	}
 }
 
@@ -473,6 +491,10 @@ func (r *Replica) setupShards(masterAddr string, masterPort int) {
 
 func (r *Replica) makeUniqueBallot(ballot int32) int32 {
 	return (ballot << 4) | r.Id
+}
+
+func (r *Replica) makeBallotLargerThan(ballot int32) int32 {
+	return r.makeUniqueBallot((ballot >> 4) + 1)
 }
 
 func (r *Replica) updateCommittedUpTo() {
@@ -606,6 +628,15 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 }
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
+	// Reply to client directly
+	propreply := &genericsmrproto.ProposeReplyTS{
+					TRUE,
+					propose.CommandId,
+					state.NIL,
+					propose.Timestamp,
+					propose.ClientId}
+	r.ReplyProposeTS(propreply, propose.Reply)
+	return
 
 
 	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)
@@ -655,7 +686,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 			cmds,
 			r.makeUniqueBallot(0),
 			PREPARING,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0}})
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0, nil}})
 		r.bcastPrepare(instNo, r.makeUniqueBallot(0), true)
 		//dlog.Printf("Classic round for instance %d\n", instNo)
 	} else {
@@ -663,7 +694,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 			cmds,
 			r.defaultBallot,
 			PREPARED,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0}})
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0, nil}})
 
 		r.recordInstanceMetadata(r.getInstance(instNo))
 		r.recordCommands(cmds)
@@ -948,4 +979,38 @@ func (r *Replica) executeCommands() {
 		}
 	}
 
+}
+
+/**********************************************************************
+
+                      RECOVERY ACTIONS
+
+***********************************************************************/
+
+func (r *Replica) startRecoveryForInstance(instance int32) {
+	log.Fatal("Recovery for instance not implemented.")
+
+	if r.getInstance(instance) == nil {
+		r.setInstance(instance, nil)
+	}
+
+	inst := r.getInstance(instance)
+	if inst.lb == nil {
+		inst.lb = &LeaderBookkeeping{inst.lb.clientProposals, 0, 0, 0, 0, nil}
+
+	} else {
+		inst.lb = &LeaderBookkeeping{inst.lb.clientProposals, 0, 0, 0, 0, nil}
+	}
+
+	if inst.status == ACCEPTED {
+		inst.lb.recoveryInst = &RecoveryInstance{inst.cmds, inst.status}
+		inst.lb.maxRecvBallot = inst.ballot
+	} else if inst.status == PREPARED {
+		inst.lb.recoveryInst = &RecoveryInstance{inst.cmds, inst.status}
+	}
+
+	//compute larger ballot
+	inst.ballot = r.makeBallotLargerThan(inst.ballot)
+
+	r.bcastPrepare(instance, inst.ballot, true)
 }
