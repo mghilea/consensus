@@ -4,9 +4,14 @@
 	  ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol":[
-	  "multi_paxos", "epaxos"
+	  "multi_paxos", "dpaxos", "epaxos"
   ],
   "replication_protocol_settings": [
+    {
+	    "server_delay_reply": true,
+      "server_execute_commands": true,
+      "server_thrifty": true
+    },
     {
 	    "server_delay_reply": true,
       "server_execute_commands": true,
@@ -60,9 +65,11 @@
   },
  "client_total": [
     [4, 8, 12],
+    [4, 8, 12],
     [4, 8, 12]
   ],
   "client_processes_per_client_node": [
+    [4, 8, 12],
     [4, 8, 12],
     [4, 8, 12]
   ],
@@ -87,7 +94,7 @@
       "height": 600,
       "width": 800,
       "series_indep_vars_idx": 0,
-      "series_titles": ["Multi-Paxos", "EPaxos"],
+      "series_titles": ["Multi-Paxos", "DPaxos", "EPaxos"],
       "x_var_is_config": false,
       "x_var": ["run_stats", "app", "tput", "p50"],
       "x_label": "Throughput (ops/s)",
@@ -101,7 +108,7 @@
       "height": 600,
       "width": 800,
       "series_indep_vars_idx": 0,
-      "series_titles": ["Multi-Paxos", "EPaxos"],
+      "series_titles": ["Multi-Paxos", "DPaxos", "EPaxos"],
       "x_var_is_config": false,
       "x_var": ["run_stats", "app", "tput", "p50"],
       "x_label": "Throughput (ops/s)",
@@ -113,14 +120,14 @@
   "plot_cdf_png_font": "DejaVu Sans,12",
   "plot_cdf_png_height": 600,
   "plot_cdf_png_width": 800,
-  "plot_cdf_series_title": ["Multi-Paxos", "EPaxos"],
+  "plot_cdf_series_title": ["Multi-Paxos", "DPaxos", "EPaxos"],
   "plot_cdf_x_label": "Latency (ms)",
   "plot_cdf_y_label": "Cumulative ratio of operations",
   "plot_directory_name": "plots",
   "plot_tput_lat_png_font": "DejaVu Sans,12",
   "plot_tput_lat_png_height": 600,
   "plot_tput_lat_png_width": 800,
-  "plot_tput_lat_series_title": ["Multi-Paxos", "EPaxos"],
+  "plot_tput_lat_series_title": ["Multi-Paxos", "DPaxos", "EPaxos"],
   "plot_tput_lat_x_label": "Throughput (ops/sec)",
   "plot_tput_lat_y_label": "Latency (ms)",
   "base_local_exp_directory": "/users/rghilea/consensus/experiments/sharding/results/mp-ep-3",

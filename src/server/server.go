@@ -4,6 +4,7 @@ import (
 	"abd"
 	"dlog"
 	"dpaxos"
+	"epaxos"
 	"flag"
 	"fmt"
 	"gpaxos"
@@ -33,6 +34,7 @@ var doAbd *bool = flag.Bool("a", false, "Use ABD as the replication protocol. De
 var doMencius *bool = flag.Bool("m", false, "Use Mencius as the replication protocol. Defaults to false.")
 var doGpaxos *bool = flag.Bool("g", false, "Use Generalized Paxos as the replication protocol. Defaults to false.")
 var doEpaxos *bool = flag.Bool("e", false, "Use EPaxos as the replication protocol. Defaults to false.")
+var doDpaxos *bool = flag.Bool("d", false, "Use DPaxos as the replication protocol. Defaults to false.")
 var procs *int = flag.Int("p", 8, "GOMAXPROCS. Defaults to 2")
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 var blockprofile = flag.String("blockprofile", "", "write block profile to file")
@@ -136,8 +138,10 @@ func main() {
 			*durable, *statsFile)
 	} else if *doEpaxos {
 		log.Println("Starting Egalitarian Paxos replica...")
-		// rep = epaxos.NewReplica(*shardIdx, replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
-		// 	*beacon, *durable, *statsFile, *noConflicts, *snapshotEnabled, *snapshotFile, *maxInstanceSpaceSize)
+		rep = epaxos.NewReplica(*shardIdx, replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
+			*beacon, *durable, *statsFile, *noConflicts, *snapshotEnabled, *snapshotFile, *maxInstanceSpaceSize)
+	} else if *doDpaxos {
+		log.Println("Starting Egalitarian Paxos replica...")
 		rep = dpaxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
 			*beacon, *durable, *statsFile, *doBatch, *epochLength, *snapshotEnabled, *snapshotFile, *maxInstanceSpaceSize)
 	} else if *doMencius {

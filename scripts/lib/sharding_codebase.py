@@ -25,7 +25,8 @@ class ShardingCodebase(ExperimentCodebase):
             'multi_paxos': '',
             'abd': ' -a',
             'gryff': ' -t',
-            'mdl': ' -mdl'
+            'mdl': ' -mdl',
+            'dpaxos': ' -d'
         }[replication_protocol]
 
     def get_client_cmd(self, config, i, k, run, local_exp_directory, remote_exp_directory):
