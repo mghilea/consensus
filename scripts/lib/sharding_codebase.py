@@ -20,6 +20,8 @@ class ShardingCodebase(ExperimentCodebase):
     def get_replication_protocol_arg_from_name(self, replication_protocol):
         return {
             'epaxos': ' -e',
+            'epaxos1': ' -e1',
+            'epaxos2': ' -e2',
             'gpaxos': ' -g',
             'mencius': ' -m',
             'multi_paxos': '',
@@ -115,10 +117,12 @@ class ShardingCodebase(ExperimentCodebase):
         if 'server_epaxos_mode' in config['replication_protocol_settings'] and config['replication_protocol_settings']['server_epaxos_mode']:
             client_command += ' -epaxosMode'
 
+        if config['replication_protocol'] == 'epaxos1' or config['replication_protocol'] == 'epaxos2':
+            client_command += ' -forceLeader 0'
+
         # if 'server_emulate_wan' in config and not config['server_emulate_wan']:
         #     client_command += ' -defaultReplicaOrder'
         #     client_command += ' -forceLeader %d' % i
-
         if config['replication_protocol'] == 'abd':
             if config['replication_protocol_settings']['client_regular_consistency']:
                 client_command += ' -regular'

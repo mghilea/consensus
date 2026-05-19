@@ -213,6 +213,12 @@ func createClientWithID(uniqueID int32, replyChan chan fastrpc.Serializable) *cl
 	case "epaxos":
 		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true, replyChan, *lan)
+	case "epaxos1":
+		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
+			*statsFile, false, true, replyChan, *lan)
+	case "epaxos2":
+		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
+			*statsFile, false, true, replyChan, *lan)
 	default:
 		return clients.NewProposeClient(uniqueID, *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, false, replyChan, *lan)

@@ -1,4 +1,4 @@
-package epaxos
+package epaxos2
 
 import (
 	"bloomfilter"
@@ -135,6 +135,10 @@ type LeaderBookkeeping struct {
 	executedTime      time.Time
 	blockStartTime    time.Time
 	depReadTime       []time.Time
+}
+
+type Exec struct {
+	r *Replica
 }
 
 func NewReplica(shardIdx int, id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
@@ -652,58 +656,47 @@ func (r *Replica) setupShards(masterAddr string, masterPort int) {
 ************************************/
 
 func (r *Replica) executeCommands() {
-	const SLEEP_TIME_NS = 1e6
-	problemInstance := make([]int32, r.N)
-	timeout := make([]uint64, r.N)
-	for q := 0; q < r.N; q++ {
-		problemInstance[q] = -1
-		timeout[q] = 0
-	}
-
 	for !r.Shutdown {
 		executed := false
 		for q := 0; q < r.N; q++ {
-			inst := int32(0)
-			for inst = r.ExecedUpTo[q] + 1; inst < r.crtInstance[q]; inst++ {
-				if r.getInstance(int32(q), inst) != nil && r.getInstance(int32(q), inst).Status == epaxosproto.EXECUTED {
-					dlog.Printf("[%d.%d] Already execed via dependent instance.\n", q, inst)
-					if inst == r.ExecedUpTo[q]+1 {
-						r.ExecedUpTo[q] = inst
-					}
-					continue
-				}
-				if r.getInstance(int32(q), inst) == nil || r.getInstance(int32(q), inst).Status != epaxosproto.COMMITTED {
-					if inst == problemInstance[q] {
-						timeout[q] += SLEEP_TIME_NS
-						if timeout[q] >= COMMIT_GRACE_PERIOD {
-							r.instancesToRecover <- &instanceId{int32(q), inst}
-							timeout[q] = 0
-						}
-					} else {
-						problemInstance[q] = inst
-						timeout[q] = 0
-					}
-					if r.getInstance(int32(q), inst) == nil {
-						continue
-					}
+			i := int32(r.logOffset[q])
+			for i <= r.CommittedUpTo[q] {
+				inst := r.getInstance(int32(q), i)
+				if inst == nil {
 					break
 				}
-				if r.getInstance(int32(q), inst).lb != nil {
-					dlog.Printf("[%d.%d] Trying to execute at time %d.\n", q, inst, time.Now().Sub(r.getInstance(int32(q), inst).lb.committedTime))
-				}
-				if ok := r.exec.executeCommand(int32(q), inst); ok {
-					executed = true
-					if inst == r.ExecedUpTo[q]+1 {
-						r.ExecedUpTo[q] = inst
+
+				if inst.Cmds != nil {
+					inst := r.getInstance(int32(q), i)
+					for j := 0; j < len(inst.Cmds); j++ {
+						val := inst.Cmds[j].Execute(r.State)
+						if r.NeedsWaitForExecute(&inst.Cmds[j]) && inst.lb != nil && inst.lb.clientProposals != nil {
+							propreply := &genericsmrproto.ProposeReplyTS{
+								TRUE,
+								inst.lb.clientProposals[j].CommandId,
+								val,
+								inst.lb.clientProposals[j].Timestamp,
+								inst.lb.clientProposals[j].ClientId}
+							dlog.Printf("Replying to client request after execute for clientId %d and commandId %d at timestamp %f\n", propreply.ClientId, propreply.CommandId, time.Now().UnixNano())
+							r.ReplyProposeTS(propreply, inst.lb.clientProposals[j].Reply)
+						}
 					}
+					executed = true
+					if i == r.ExecedUpTo[q]+1 {
+						r.ExecedUpTo[q] = i
+					}
+					i++
+				} else {
+					break
 				}
 			}
 		}
+
 		if !executed {
-			time.Sleep(SLEEP_TIME_NS)
+			time.Sleep(1000 * 1000)
 		}
-		//dlog.Printf("ExecedUpTo=%v, crtInstance=%v.\n", r.ExecedUpTo, r.crtInstance)
 	}
+
 }
 
 /* Ballot helper functions */

@@ -119,7 +119,7 @@ func (c *ProposeClient) sendPropose() {
 			if c.forceLeader >= 0 {
 				replica = c.forceLeader
 			} else {
-				replica = 0 //int(c.replicasByPingRank[shard][0])
+				replica = int(c.replicasByPingRank[shard][0])
 				log.Printf("Client %d sending propose request to replica %d", c.id, replica)
 			}
 			c.replicaWriters[shard][replica].WriteByte(clientproto.GEN_PROPOSE)
@@ -148,7 +148,7 @@ func (c *ProposeClient) GetReplicaFromKey(k state.Key) string {
 		if c.forceLeader >= 0 {
 			replicaId = c.forceLeader
 		} else {
-			replicaId = 0 //int(c.replicasByPingRank[shard][0])
+			replicaId = int(c.replicasByPingRank[shard][0])
 		}
 		replicaAddr = strings.Split(c.replicasPerShard[shard][replicaId], ":")[0]
 	} else {
