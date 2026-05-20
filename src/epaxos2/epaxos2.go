@@ -667,7 +667,6 @@ func (r *Replica) executeCommands() {
 				}
 
 				if inst.Cmds != nil {
-					inst := r.getInstance(int32(q), i)
 					for j := 0; j < len(inst.Cmds); j++ {
 						val := inst.Cmds[j].Execute(r.State)
 						if r.NeedsWaitForExecute(&inst.Cmds[j]) && inst.lb != nil && inst.lb.clientProposals != nil {
