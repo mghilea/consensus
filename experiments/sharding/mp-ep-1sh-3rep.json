@@ -34,7 +34,7 @@
       "us-west-1-0",
       "eu-west-1-0"
   ],
-  "num_shards": 3,
+  "num_shards": 1,
   "shuffle_shard_leaders": true,
   "clients": [
 	  "client-0-0"
@@ -69,16 +69,16 @@
       }
   },
  "client_total": [
-    [20, 30, 40],
-    [20, 30, 40],
-    [20, 30, 40],
-    [20, 30, 40]
+    [4, 8, 12],
+    [4, 8, 12],
+    [4, 8, 12],
+    [4, 8, 12]
   ],
   "client_processes_per_client_node": [
-    [20, 30, 40],
-    [20, 30, 40],
-    [20, 30, 40],
-    [20, 30, 40]
+    [4, 8, 12],
+    [4, 8, 12],
+    [4, 8, 12],
+    [4, 8, 12]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": 0,
