@@ -1115,15 +1115,15 @@ func bfFromCommands(cmds []state.Command) *bloomfilter.Bloomfilter {
 ***********************************************************************/
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
-	// Reply to client directly
-	propreply := &genericsmrproto.ProposeReplyTS{
-					TRUE,
-					propose.CommandId,
-					state.NIL,
-					propose.Timestamp,
-					propose.ClientId}
-	r.ReplyProposeTS(propreply, propose.Reply)
-	return
+	// // Reply to client directly
+	// propreply := &genericsmrproto.ProposeReplyTS{
+	// 				TRUE,
+	// 				propose.CommandId,
+	// 				state.NIL,
+	// 				propose.Timestamp,
+	// 				propose.ClientId}
+	// r.ReplyProposeTS(propreply, propose.Reply)
+	// return
 
 	//TODO!! Handle client retries
 

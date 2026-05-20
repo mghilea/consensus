@@ -628,15 +628,15 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 }
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
-	// Reply to client directly
-	propreply := &genericsmrproto.ProposeReplyTS{
-					TRUE,
-					propose.CommandId,
-					state.NIL,
-					propose.Timestamp,
-					propose.ClientId}
-	r.ReplyProposeTS(propreply, propose.Reply)
-	return
+	// // Reply to client directly
+	// propreply := &genericsmrproto.ProposeReplyTS{
+	// 				TRUE,
+	// 				propose.CommandId,
+	// 				state.NIL,
+	// 				propose.Timestamp,
+	// 				propose.ClientId}
+	// r.ReplyProposeTS(propreply, propose.Reply)
+	// return
 
 
 	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)
